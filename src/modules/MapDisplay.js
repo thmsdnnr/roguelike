@@ -4,7 +4,7 @@ import {Game, Player} from './BinaryTree.js';
 export default class MapDisplay extends Component {
   constructor(props) {
     super(props);
-    this.state={hide:true, keyHeld:null, steps:0, keyTimeout:null, ctx:null, P:null};
+    this.state={redrawDistance:10, hide:true, keyHeld:null, steps:0, keyTimeout:null, ctx:null, P:null};
     this.movePlayer=this.movePlayer.bind(this);
   }
 
@@ -15,6 +15,7 @@ export default class MapDisplay extends Component {
     let cvs = document.getElementById('game');
     let ctx = cvs.getContext('2d');
     this.setState({G,P,ctx,cvs});
+
     window.addEventListener('keypress', this.handleKeyPress);
     // window.addEventListener('keydown', this.handleKeyHeld);
     // window.addEventListener('keyup', this.handleKeyHeld);
@@ -25,6 +26,12 @@ export default class MapDisplay extends Component {
 
   movePlayer = (key, step) => {
     if (this.state.P) {
+      if (!this.state.camX) {
+        var camX = this.state.P.xPos;
+        var camY = this.state.P.yPos;
+        this.setState({camX:camX, camY:camY});
+      }
+
       const C=this.state.ctx;
       switch (key) {
         case 'KeyW': this.state.P.movePlayer(0,-step,C); break;
@@ -61,6 +68,7 @@ export default class MapDisplay extends Component {
     //Clamp the camera position to the world bounds while centering the camera around the player
     var camX = this.state.P.xPos;
     var camY = this.state.P.yPos;
+    this.setState({camX:camX, camY:camY});
     console.log(camX, camY);
 if (this.state.hide)
   {
@@ -72,7 +80,7 @@ if (this.state.hide) {
     this.state.ctx.save();
     // Create a circle
     this.state.ctx.beginPath();
-    this.state.ctx.arc(camX, camY, 50, 0, Math.PI * 2, false);
+    this.state.ctx.arc(camX, camY, 100, 0, Math.PI * 2, false);
     this.state.ctx.clip();
   }
     this.state.G.drawEntities();
@@ -94,13 +102,19 @@ if (this.state.hide) {
       if (e.code==='KeyH') {
         this.setState({hide:!this.state.hide}, ()=>this.draw());
       }
-      let step = e.ctrlKey ? 20 : 5;
-      this.setState({steps:this.state.steps+1});
-      if (this.state.steps%10===0) {
+      let steps = e.ctrlKey ? 20 : 5;
+      this.setState({steps:this.state.steps+=steps});
+      console.log(this.state.redrawDistance);
+      if ((Math.abs(this.state.P.xPos-this.state.camX)>this.state.redrawDistance)||
+      (Math.abs(this.state.P.yPos-this.state.camY)>25))
+      {
         this.draw();
       }
-
-      this.movePlayer(e.code, step);
+      // if (this.state.steps%10===0) {
+      //   this.draw();
+      //   this.setState({steps:0});
+      // }
+      this.movePlayer(e.code, steps);
     }
   }
 

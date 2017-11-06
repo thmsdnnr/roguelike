@@ -1,76 +1,97 @@
-//globals
-  let camX=500;
-  let camY=500;
+let ctx, currentElement;
+let level=1;
+
+let Hallway = function(x1, y1, x2, y2, direction) {
+  this.x1=x1;
+  this.y1=y1;
+  this.x2=x2;
+  this.y2=y2;
+  this.direction=direction;
+  this.connectsNodes=null;
+  this.subHallway=null;
+  this.fillStyle=null;
+}
+
+Hallway.prototype.getSubHallways = function() {
+  if (!this.subHallway) { return [this] }
+  else {
+    let cHall=this.subHallway;
+    let hList=[this];
+    while (cHall!==null) {
+      hList.push(cHall);
+      cHall.subHallway ? cHall=cHall.subHallway : cHall=null;
+    }
+    return hList;
+  }
+}
+
+Hallway.prototype.drawSelf = function(ctx) {
+  let halls=this.getSubHallways();
+  ctx.strokeStyle=`rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`;
+  ctx.fillStyle=`rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`;
+  halls.forEach((hall)=>{
+    if (!hall.fillStyle) {
+      let grd=ctx.createLinearGradient(hall.x1,hall.y1,hall.x2,hall.y2);
+      grd.addColorStop(0, `rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`);
+      grd.addColorStop(0.5, `rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`);
+      grd.addColorStop(1,'#480048');
+      hall.fillStyle=grd;
+    }
+    ctx.fillStyle=hall.fillStyle;
+    ctx.fillRect(hall.x1, hall.y1, hall.x2-hall.x1, hall.y2-hall.y1);
+  });
+}
+
 let Player = function(xPos, yPos) {
   this.xPos=xPos;
   this.yPos=yPos;
   this.ctx=null;
 }
 
-let Item = function(xPos, yPos) {
+let Item = function(xPos, yPos, size, type, value, consumedCallback) {
   this.xPos=xPos;
   this.yPos=yPos;
-  this.type='health';
-  this.value=10;
+  this.size=size;
+  this.type=type;
+  this.value=value;
+  this.consumedCallback=consumedCallback;
 }
 
 Item.prototype.drawSelf = function(ctx) {
-  ctx.fillStyle='#0F0';
-  console.log('draw');
-  ctx.fillRect(this.xPos,this.yPos,5,5);
+  switch (this.value) {
+    case 'health': ctx.fillStyle='#0F0'; break;
+    case 'teleporter': ctx.fillStyle='#000'; break;
+    case 'weapon': ctx.fillStyle='#F00'; break;
+  }
+  ctx.globalCompositeOperation='lighten';
+  ctx.fillRect(this.xPos,this.yPos,this.size,this.size);
+  ctx.globalCompositeOperation='source-over';
 }
 
-Item.prototype.consume = function(ctx) {
-  // ctx.clearRect(this.xPos,this.yPos,5,5);
+Item.prototype.consume = function(ctx, oldBackgroundColor) {
+  ctx.fillStyle=oldBackgroundColor;
+  ctx.fillRect(this.xPos,this.yPos,this.size,this.size);
   this.consumed=true;
-}
-
-let Teleporter = function(xPos, yPos) {
-  this.xPos=xPos;
-  this.yPos=yPos;
-  this.ctx=null;
+  console.log(this);
+  if (this.consumedCallback) { this.consumedCallback(); }
 }
 
 Player.prototype.currentlyInside = function() {
-  for (var i=0;i<this.entities.length;i++) { //TODO optimize
-    const e=this.entities[i];
-    if ((((e.x1<=this.xPos)&&(e.x2>=this.xPos+playerSize)))&&
-    ((e.y1<=this.yPos)&&(e.y2>=this.yPos+playerSize))) {
-      console.log(e);
-      return e;
-    }
-  }
+  // for (var i=0;i<this.entities.length;i++) { //TODO optimize
+  //   const e=this.entities[i];
+  //   if ((((e.x1<=this.xPos)&&(e.x2>=this.xPos+playerSize)))&&
+  //   ((e.y1<=this.yPos)&&(e.y2>=this.yPos+playerSize))) {
+  //     e;
+  //     return e;
+  //   }
+  // }
+  return this.currentLocation;
 }
 
 Player.prototype.consume = function(e) {
   const type=e.type;
   this.hasOwnProperty(type) ?  this[type]+=e.value : this[type]=e.value;
-  }
-
-Player.prototype.isTouching = function() {
-  console.log(this.touchables);
-  for (var i=0;i<this.touchables.length;i++) { //TODO optimize
-    const e=this.touchables[i];
-    if ((e.xPos===this.xPos)&&(e.yPos===this.yPos))
-    {
-      this.consume(e);
-      e.consume();
-      return e;
-    }
-    }
-  }
-
-//TODO special handling needed for hallways
-Player.prototype.isMoveAllowed = function(newX, newY) {
-  console.dir(this);
-  for (var i=0;i<this.entities.length;i++) { //TODO optimize
-    let e=this.entities[i];
-    if ((((e.x1<=newX)&&(e.x2>=newX+playerSize)))&&
-    ((e.y1<=newY)&&(e.y2>=newY+playerSize))) {
-          return e;
-    }
-  }
-  return false;
+  console.log('consume',this);
 }
 
 Player.prototype.drawSelf = function(ctx) {
@@ -84,38 +105,38 @@ Player.prototype.setPos = function(xPos, yPos) {
 }
 
 Player.prototype.movePlayer = function(xAmt, yAmt, ctx) {
-
-  let e=this.isMoveAllowed(this.xPos+xAmt, this.yPos+yAmt);
+  let currentEl=this.currentlyInside();
+  let e = this.currentLocation.isMoveAllowed(this.xPos+xAmt, this.yPos+yAmt);
   if (e) {
-    const currentEl=this.currentlyInside();
-    if (currentEl!==e) { console.log('we transitioned'); }
-    ctx.fillStyle=currentEl.fillColor;
-    ctx.strokeStyle=currentEl.fillColor;
+    this.currentLocation=e;
+    console.log('we transitioned', this.currentLocation);
+    if (currentEl!==e) {
+      console.log('we transitioned', this.currentLocation);
+    }
+    ctx.fillStyle=currentEl.fillStyle;
+    ctx.strokeStyle=currentEl.fillStyle;
     ctx.clearRect(this.xPos,this.yPos,5,5);
     ctx.fillRect(this.xPos,this.yPos,5,5);
     this.xPos+=xAmt;
     this.yPos+=yAmt;
+    let touching=currentEl.isTouchingItem(this.xPos, this.yPos);
+    if (touching) { this.consume(touching); }
     this.drawSelf(ctx);
-    console.log(this.isTouching());
-
   }
-  else {
-    console.log('cannot go to there');
-  }
+  else { console.log('cannot go to there'); }
 }
 
 const flattenArr = (arr) => [].concat(...arr);
-
 const round5 = (x) => Math.ceil(x/5)*5;
 const randomIn = (min,max) => Math.floor(Math.random()*(max-min))+min;
 const rF = (min,max) => Math.floor(Math.random()*(max-min))+min;
 const hallwayWidth = 10;
-const minLeafSize=20;
+const minLeafSize=50;
 const maxLeafSize=500;
-const desiredNumberOfLeaves=25;
+const desiredNumberOfLeaves=20;
 const playerSize = 5;
-const gameWidth=1000;
-const gameHeight=1000;
+const gameWidth=3000;
+const gameHeight=3000;
 
 let Leaf = function(x, y, width, height) { //x, y is upper-left coord
   // console.log('new leaf x, y, width, height:', x, y, width, height);
@@ -135,8 +156,113 @@ let Container = function(x1, y1, x2, y2) {
   this.x2=x2;
   this.y2=y2;
   this.hallway=null;
-  this.fillColor=null;
+  this.fillStyle=null;
   this.contents=[]; //contents is an array of entities
+}
+
+Container.prototype.isTouchingItem = function(xPos, yPos) {
+  for (var i=0;i<this.contents.length;i++) { //TODO optimize
+    const e=this.contents[i];
+    if (((xPos<e.xPos+e.size)&&(xPos>=e.xPos))&&
+        ((yPos<e.yPos+e.size)&&(yPos>=e.yPos)))
+    {
+      console.log('consume');
+      e.consume(ctx,this.fillStyle);
+      return e;
+    }
+  }
+  return false;
+}
+
+Container.prototype.isMoveAllowed = function(newX, newY) {
+  //if within container, or if going into hallway, yes
+  let nLowerX=newX;
+  let nUpperX=newX+playerSize;
+  let nLowerY=newY;
+  let nUpperY=newY+playerSize;
+  if ((nLowerX>=this.x1&&nUpperX<=this.x2)&&
+  (nLowerY>=this.y1&&nUpperY<=this.y2)) {
+    return this;
+  }
+  else if ((nLowerX>=this.hallway.x1&&nUpperX<=this.hallway.x2)&&
+  (nLowerY>=this.hallway.y1&&nUpperY<=this.hallway.y2)) {
+    //hallway, change player location to hallway
+    return this.hallway;
+  }
+  else if (this.prevHallway) {
+    if ((nLowerX>=this.prevHallway.x1&&nUpperX<=this.prevHallway.x2)&&
+  (nLowerY>=this.prevHallway.y1&&nUpperY<=this.prevHallway.y2)) {
+    //hallway, change player location to hallway
+    return this.prevHallway;
+    }
+  }
+  else {
+    return false;
+  }
+
+  // this.contents.forEach((item)=>{
+  //   Player.prototype.isMoveAllowed = function(newX, newY) {
+  //     for (var i=0;i<this.entities.length;i++) { //TODO optimize
+  //       let e=this.entities[i];
+  //       if ((((e.x1<=newX)&&(e.x2>=newX+playerSize)))&&
+  //       ((e.y1<=newY)&&(e.y2>=newY+playerSize))) {
+  //         return e;
+  //       }
+  //     }
+  //     return false;
+  //   }
+  //   for (var i=0;i<this.entities.length;i++) { //TODO optimize
+  //     let e=this.entities[i];
+  //     if ((((e.x1<=newX)&&(e.x2>=newX+playerSize)))&&
+  //     ((e.y1<=newY)&&(e.y2>=newY+playerSize))) {
+  //       return e;
+  //     }
+  //   }
+  //   return false;
+  // })
+}
+
+Hallway.prototype.isTouchingItem = function() {
+  return false;
+}
+
+Hallway.prototype.isMoveAllowed = function(newX, newY) {
+    //if within hallway, or if going into new hallway or container, yes
+    let nLowerX=newX;
+    let nUpperX=newX+playerSize;
+    let nLowerY=newY;
+    let nUpperY=newY+playerSize;
+    if ((nLowerX>=this.x1&&nUpperX<=this.x2)&&
+    (nLowerY>=this.y1&&nUpperY<=this.y2)) {
+      return this;
+    }
+    else if (this.connectsNodes) {
+      let prevC=this.connectsNodes[0];
+      let nextC=this.connectsNodes[1];
+
+      let nLowerX=newX;
+      let nUpperX=newX+playerSize;
+      let nLowerY=newY;
+      let nUpperY=newY+playerSize;
+
+      if ((nLowerX>=prevC.x1&&nUpperX<=prevC.x2)&&
+      (nLowerY>=prevC.y1&&nUpperY<=prevC.y2)) {
+        return prevC;
+      }
+      else if ((nLowerX>=nextC.x1&&nUpperX<=nextC.x2)&&
+      (nLowerY>=nextC.y1&&nUpperY<=nextC.y2)) {
+        //hallway, change player location to hallway
+        return nextC;
+      }
+    }
+    // else if ((nLowerX>=this.hallway.x1&&nUpperX<=this.hallway.x2)&&
+    // (nLowerY>=this.hallway.y1&&nUpperY<=this.hallway.y2)) {
+    //   //hallway, change player location to hallway
+    //   return this.hallway;
+    // }
+    else {
+      return false;
+    }
 }
 
 Leaf.prototype.addContainer = function() {
@@ -149,19 +275,14 @@ Leaf.prototype.addContainer = function() {
 
 Leaf.prototype.drawSelf = function(ctx) {
   let C=this.container;
-  var grd=ctx.createLinearGradient(C.x1,C.y1,C.x2,C.y2);
-  grd.addColorStop(0,'#C04848');
-  grd.addColorStop(0.25,'#ED4264');
-  grd.addColorStop(0.75,'#FFEDBC');
-  // grd.addColorStop(0.25,"pink");
-  grd.addColorStop(1,'#480048');
-  ctx.fillStyle=grd;
-  // ctx.fillRect(20,20,150,100);
-
-  ctx.strokeStyle=`rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`;
-  C.fillColor=grd;//`rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`;
-  ctx.fillStyle=C.fillColor;
-  // ctx.strokeRect(this.x, this.y, this.width, this.height);
+  if (!C.fillStyle) {
+    let grd=ctx.createLinearGradient(C.x1,C.y1,C.x2,C.y2);
+    grd.addColorStop(0, `rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`);
+    grd.addColorStop(0.5, `rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`);
+    grd.addColorStop(1,'#480048');
+    C.fillStyle=grd;
+  }
+  ctx.fillStyle=C.fillStyle;
   ctx.fillRect(C.x1, C.y1, C.x2-C.x1, C.y2-C.y1);
 }
 
@@ -196,50 +317,6 @@ Leaf.prototype.getLeafs = function() {
   else {
     return [].concat(this.left.getLeafs(), this.right.getLeafs());
   }
-}
-
-let Hallway = function(x1, y1, x2, y2, direction) {
-  console.log('new hallway');
-  this.x1=x1;
-  this.y1=y1;
-  this.x2=x2;
-  this.y2=y2;
-  this.direction=direction;
-  this.connectsNodes=null;
-  this.subHallway=null;
-  this.fillColor=null;
-}
-
-Hallway.prototype.getSubHallways = function() {
-  if (!this.subHallway) { return [this] }
-  else {
-    let cHall=this.subHallway;
-    let hList=[this];
-    while (cHall!==null) {
-      hList.push(cHall);
-      cHall.subHallway ? cHall=cHall.subHallway : cHall=null;
-    }
-    return hList;
-  }
-}
-
-Hallway.prototype.drawSelf = function(ctx) {
-  let halls=this.getSubHallways();
-  console.log(halls,'halsey');
-  ctx.strokeStyle=`rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`;
-  ctx.fillStyle=`rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`;
-  halls.forEach((hall)=>{
-    ctx.strokeStyle=`rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`;
-    ctx.fillStyle=`rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`;
-
-    hall.fillColor=ctx.fillStyle;
-    // if (hall.direction==='V') {
-      ctx.fillRect(hall.x1, hall.y1, hall.x2-hall.x1, hall.y2-hall.y1);
-    // }
-    // else {
-    //   ctx.fillRect(hall.x1pos, hall.y1pos, hall.x2pos-hall.x1pos, hallwayWidth);
-    // }
-  });
 }
 
 const rangeOverlap = (a,b) => [Math.max(a[0],b[0]),Math.min(a[1],b[1])];
@@ -291,26 +368,30 @@ Container.prototype.calculateHallway = function(dest, containerList) {
 
   let widthRO=rangeOverlap([dest.x1,dest.x2],[this.x1, this.x2]);
   let heightRO=rangeOverlap([dest.y1, dest.y2],[this.y1, this.y2]);
-  // console.log(widthRO, heightRO);
+  // widthRO, heightRO);
   if ((widthRO[1]-widthRO[0]>0)&&((widthRO[1]-widthRO[0])>hallwayWidth)) {
     let xCoord=round5(randomIn(widthRO[0]+hallwayWidth, widthRO[1]-hallwayWidth));
     let yCoord=round5(this.y2);
     let distance=dest.y1-this.y2;
-    console.log(this.id, 'width overlap draw vertical line', widthRO);
-    console.log('xcoord, ycoord, distance', xCoord, yCoord, distance);
+    // console.log(this.id, 'width overlap draw vertical line', widthRO);
+    // console.log('xcoord, ycoord, distance', xCoord, yCoord, distance);
     this.hallway=new Hallway(xCoord, yCoord, xCoord+hallwayWidth, yCoord+distance,'V');
-    this.hallway.connectsNodes=[this.id, dest.id];
+    // this.hallway.connectsNodes=[this.id, dest.id];
+    this.hallway.connectsNodes=[this, dest];
+    dest.prevHallway=this.hallway;
   }
   else if ((heightRO[1]-heightRO[0]>0)&&((heightRO[1]-heightRO[0])>hallwayWidth)) {
-    console.log(this.id, 'height overlap draw horizontal line', heightRO);
+    // console.log(this.id, 'height overlap draw horizontal line', heightRO);
     let yCoord=round5(randomIn(heightRO[0]+hallwayWidth, heightRO[1]-hallwayWidth));
     let xCoord=round5(this.x2);
     let distance=dest.x1-this.x2;
     this.hallway=new Hallway(xCoord, yCoord, xCoord+distance, yCoord+hallwayWidth, 'H');
-    this.hallway.connectsNodes=[this.id, dest.id];
+    // this.hallway.connectsNodes=[this.id, dest.id];
+    this.hallway.connectsNodes=[this, dest];
+    dest.prevHallway=this.hallway;
   }
   else {
-    console.log(this.id, 'need to draw both vert and horiz lines');
+    // console.log(this.id, 'need to draw both vert and horiz lines');
     let destFartherRight = (dest.x2-this.x2>0) ? true : false;
     let destFartherUp = (this.y2-dest.y1>0) ? true : false;
     let xDistance=Math.abs(dest.x1-this.x2);
@@ -326,7 +407,6 @@ Container.prototype.calculateHallway = function(dest, containerList) {
     if (destFartherRight) {
       //farther right, start with right TODO or up
       //if destFartherRight, pick random y-coord to start from on this
-      //go out half distance RIGHT
       xStart=this.x2;
       xEnd=dest.x1;
 
@@ -336,13 +416,12 @@ Container.prototype.calculateHallway = function(dest, containerList) {
       //check for entity intersection at each width for height from yStart to yEnd
       for (var i=0;i+hallwayWidth+xStart<xEnd;i++) {
         potentialRects.push({
-          x1:xStart+i,
-          x2:xStart+i+hallwayWidth,
-          y1:yStart,
-          y2:yEnd
+          x1:round5(xStart+i),
+          x2:round5(xStart+i+hallwayWidth),
+          y1:round5(yStart),
+          y2:round5(yEnd)
         });
       }
-      console.log(potentialRects);
       let testedOptions=[];
       let good=true;
       for (var i=0;i<potentialRects.length;i++) {
@@ -359,6 +438,7 @@ Container.prototype.calculateHallway = function(dest, containerList) {
         h1=new Hallway(xStart, newY.y2, newY.x1, newY.y2+hallwayWidth, 'H-first');
         h2=new Hallway(h1.x2, newY.y1, newY.x2, newY.y2+hallwayWidth, 'V-middle');
         h1.subHallway=h2;
+        h1.connectsNodes=[this, h2];
       }
       else { //TODO this doesnt seem to matter up or down we just draw it
         //go DOWN to random y-coord on destination
@@ -368,6 +448,9 @@ Container.prototype.calculateHallway = function(dest, containerList) {
       //go remaining half-distance LEFT
       h3 = new Hallway(h2.x2, yStart, xStart+xDistance, yStart+hallwayWidth, 'H-last');
       h2.subHallway=h3;
+      h2.connectsNodes=[h1, h3];
+      h3.connectsNodes=[h2, dest];
+      dest.prevHallway=h3;
     }
     else { //farther left, start down TODO or up
       xStart = round5(randomIn(this.x1+hallwayWidth,this.x2-hallwayWidth));
@@ -378,10 +461,10 @@ Container.prototype.calculateHallway = function(dest, containerList) {
       let potentialRects=[]; //test different y-values
       for (var i=0;i+hallwayWidth+yStart<yEnd;i++) {
         potentialRects.push({
-          x1:xStart,
-          x2:xEnd,
-          y1:yStart+i,
-          y2:yStart+i+hallwayWidth
+          x1:round5(xStart),
+          x2:round5(xEnd),
+          y1:round5(yStart+i),
+          y2:round5(yStart+i+hallwayWidth)
         });
       }
       let testedOptions=[];
@@ -403,33 +486,58 @@ Container.prototype.calculateHallway = function(dest, containerList) {
         h1=new Hallway(xStart, yStart, xStart+hallwayWidth, newX.y1, 'V-first');
         h2=new Hallway(newX.x2+hallwayWidth, newX.y1, h1.x2, newX.y2, 'H-middle');
         h1.subHallway=h2;
+        h1.connectsNodes=[this, h2];
       }
         //go DOWN to random y-coord on destination
       //go remaining half-distance DOWN
       h3 = new Hallway(h2.x1, h2.y2, h2.x1+hallwayWidth, yEnd, 'V-last'); //DOWN
       h2.subHallway=h3;
+      h2.connectsNodes=[h1, h3];
+      h3.connectsNodes=[h2, dest];
+      dest.prevHallway=h3;
     }
     this.hallway=h1;
-    console.log('farther right / up?', destFartherRight, destFartherUp);
+    // console.log('farther right / up?', destFartherRight, destFartherUp);
   }
 }
 
 Container.prototype.drawSelf = function(ctx) {
-  console.log(this);
   this.contents.map(e=>e.drawSelf(ctx));
 }
 
 let Game = function() {
-
+  this.level=1;
 };
 
 Game.prototype.drawEntities = function() {
   this.entities.map(e=>e.drawSelf(this.ctx));
+  //TODO test to assert everything is cenetered on 5s
+  console.log(this.entities.filter(e=>!e.id).filter(e=>((e.x1%5!==0||e.x2%5!==0)||(e.y1%5!==0||e.y2%5!==0))));
   let contents=this.entities.map(e=>e.contents ? e.contents : null).filter(e=>e);
-console.log(contents); //contents.map(e=>e.drawSelf());
-  this.P.touchables=flattenArr(contents);
   flattenArr(contents).filter(s=>!s.consumed).map(s=>s.drawSelf(this.ctx));
+}
 
+Game.prototype.populateEntities = function(entities, containers) {
+  /*
+  entities is an object manifest like this:
+  { type: 'health', minVal: 5, maxVal: 20, minInstances: 1, maxInstances: 5, size: 5 }];
+*/
+  entities.forEach((E)=>{
+    console.log(E);
+    let numberOfItems = E.minInstances===E.maxInstances ? E.maxInstances : randomIn(E.minInstances, E.maxInstances);
+    for (var j=0;j<numberOfItems;j++) {
+      for (var q=0;q<containers.length;q++) {
+        if (E.limitToContainers) {
+          if (E.limitToContainers.indexOf(q)===-1) { continue; }
+        }
+          let pos=containers[q].randomPosToFit(E.size);
+          if (pos) { //randomPosToFit returns false if we cannot place the item
+            let itemVal=randomIn(E.minVal,E.maxVal);
+            containers[q].contents.push(new Item(pos.x1, pos.y1, E.size, E.type, itemVal, E.consumedCallback));
+          }
+        }
+      }
+  });
 }
 
 Game.prototype.generateBoard = function() {
@@ -465,49 +573,89 @@ Game.prototype.generateBoard = function() {
   /*POSITION PLAYER*/
   let startPos=containers[0].randomPosToFit(playerSize);
   this.P.setPos(round5(startPos.x1),round5(startPos.y1));
-
+  this.P.currentLocation=containers[0];
   let hallways=flattenArr(containers.map(c=>c.hallway).filter(e=>e).map(h=>h.getSubHallways()));
 
-  for (var q=0;q<containers.length;q++) { //TODO random item placement in all containers
-    for (var j=0;j<5;j++) {
-      let rPosition=containers[q].randomPosToFit(5);
-      let health=new Item(round5(rPosition.x1), round5(rPosition.y1));
-      containers[q].contents.push(health);
+  let entityManifest = [
+    {
+      type: 'health',
+      size: 5,
+      minVal: 5,
+      maxVal: 20,
+      minInstances: 5,
+      maxInstances: 20
+    },
+    {
+      type: 'weapon',
+      size: 10,
+      minVal: 4,
+      maxVal: 14,
+      minInstances: 1,
+      maxInstances: 1,
+      limitToContainers: [0,1]
+    },
+    {
+      type: 'teleporter',
+      size: 20,
+      minVal: 5,
+      maxVal: 6,
+      minInstances: 1,
+      maxInstances: 2,
+      limitToContainers: [0],
+      consumedCallback: () => {
+        this.nextLevel();
+
+        console.log('new level:', level);
+      }
     }
-  }
+  ];
+  // ,
+  // {
+  //   type: 'weapon',
+  //   minVal: ,
+  //   maxVal:
+  //   minInstances: ,
+  //   maxInstances:
+  // }];
+
+  this.populateEntities(entityManifest, containers);
+
   this.leaves=leaves;
   this.entities=containers.concat(hallways,leaves).filter(e=>e);
+  console.log(this.entities);
+}
+
+Game.prototype.nextLevel = function () {
+  this.level++;
+  this.ctx.clearRect(0, 0, this.cvs.width, this.cvs.height);//clear the viewport AFTER the matrix is reset
+  this.initLevel();
 }
 
 Game.prototype.initLevel = function(P) {
   this.cvs = document.getElementById('game');
   this.ctx = this.cvs.getContext('2d');
-  this.P=P;
+  ctx=this.ctx;
+  if(P) { this.P=P; }
   this.generateBoard();
   this.ctx.setTransform(1,0,0,1,0,0);//reset the transform matrix as it is cumulative
   this.ctx.clearRect(0, 0, this.cvs.width, this.cvs.height);//clear the viewport AFTER the matrix is reset
   //Clamp the camera position to the world bounds while centering the camera around the player
-  var camX = P.xPos;
-  var camY = P.yPos;
-  console.log(camX, camY);
+  var camX = this.P.xPos;
+  var camY = this.P.yPos;
   this.ctx.fillStyle='#000';
   this.ctx.fillRect(0,0,this.cvs.width,this.cvs.height);
   this.ctx.translate(this.cvs.width/2-camX,this.cvs.height/2-camY);
   // Save the state, so we can undo the clipping
-   this.ctx.save();
+  this.ctx.save();
    // Create a circle
    this.ctx.beginPath();
-   this.ctx.arc(camX, camY, 50, 0, Math.PI * 2, false);
+   this.ctx.arc(camX, camY, 100, 0, Math.PI * 2, false);
    // Clip to the current path
    this.ctx.clip();
    //draw
   this.drawEntities();
-  P.entities=this.entities;
-  P.drawSelf(this.ctx);
-
+  this.P.drawSelf(this.ctx);
   this.ctx.restore();
-
-  // ctx.clearRect(0, 0, cvs.height, cvs.width);
 }
 
 module.exports = {Game, Player};
