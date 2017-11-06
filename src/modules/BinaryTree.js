@@ -10,6 +10,7 @@ let Hallway = function(x1, y1, x2, y2, direction) {
   this.connectsNodes=null;
   this.subHallway=null;
   this.fillStyle=null;
+  this.visible=true;
 }
 
 Hallway.prototype.getSubHallways = function() {
@@ -46,26 +47,29 @@ let Player = function(xPos, yPos) {
   this.xPos=xPos;
   this.yPos=yPos;
   this.ctx=null;
+  this.health=50;
+  this.XP=1;
+  this.level=1;
 }
 
-let Item = function(xPos, yPos, size, type, value, consumedCallback) {
+let Item = function(xPos, yPos, size, type, value, consumedCallback, visible) {
   this.xPos=xPos;
   this.yPos=yPos;
   this.size=size;
   this.type=type;
   this.value=value;
   this.consumedCallback=consumedCallback;
+  this.visible=visible;
 }
 
 Item.prototype.drawSelf = function(ctx) {
-  switch (this.value) {
+  switch (this.type) {
     case 'health': ctx.fillStyle='#0F0'; break;
     case 'teleporter': ctx.fillStyle='#000'; break;
-    case 'weapon': ctx.fillStyle='#F00'; break;
+    case 'weapon': ctx.fillStyle='#FFA500'; break;
+    case 'enemy': ctx.fillStyle='#FF0000'; break;
   }
-  ctx.globalCompositeOperation='lighten';
   ctx.fillRect(this.xPos,this.yPos,this.size,this.size);
-  ctx.globalCompositeOperation='source-over';
 }
 
 Item.prototype.consume = function(ctx, oldBackgroundColor) {
@@ -89,8 +93,14 @@ Player.prototype.currentlyInside = function() {
 }
 
 Player.prototype.consume = function(e) {
+  console.log(e);
   const type=e.type;
-  this.hasOwnProperty(type) ?  this[type]+=e.value : this[type]=e.value;
+  switch (e.type) {
+    case 'health': this.hasOwnProperty(type) ?  this[type]+=e.value : this[type]=e.value; break;
+    case 'teleporter': break; //TODO weapon handling, eliminate duplicates
+    case 'weapon': this.hasOwnProperty(type) ?  this[type]=this[type].concat(e.value) : this[type]=[e.value]; break;
+  }
+  this.callbackChange(this);
   console.log('consume',this);
 }
 
@@ -104,14 +114,47 @@ Player.prototype.setPos = function(xPos, yPos) {
   this.yPos=yPos;
 }
 
+Player.prototype.attack = function() {
+
+}
+
+const fight = (a,b) => {
+  console.log('fight',a,b);
+  if (a.health>0&&b.health>0) {
+    let aDamage=a.level*randomIn(2,5); //TODO damage cts etc
+    let bDamage=b.level*randomIn(1,3);
+    a.health-=bDamage;
+    b.health-=aDamage;
+    return false;
+  }
+  else if (a.health<=0) {
+    console.log('you died sorry');
+    return false;
+    //reset game
+  }
+  else {
+    a.XP+=b.gainFromKill;
+    return true;
+    //player wins
+  }
+};
+
 Player.prototype.movePlayer = function(xAmt, yAmt, ctx) {
   let currentEl=this.currentlyInside();
-  let e = this.currentLocation.isMoveAllowed(this.xPos+xAmt, this.yPos+yAmt);
-  if (e) {
-    this.currentLocation=e;
-    console.log('we transitioned', this.currentLocation);
-    if (currentEl!==e) {
-      console.log('we transitioned', this.currentLocation);
+  let nextEl = this.currentLocation.isMoveAllowed(this.xPos+xAmt, this.yPos+yAmt);
+  if (nextEl) {
+    this.currentLocation=nextEl;
+    let touching=currentEl.isTouchingItem(this.xPos+xAmt, this.yPos+yAmt);
+    console.log(touching,'t');
+    if (touching.type==='enemy') {
+      if (fight(this,touching)) {
+        touching.consume(ctx, currentEl.fillStyle);
+      }
+      console.log('f'); return false;
+    }
+    else if (touching&&!touching.consumed){
+      this.consume(touching);
+      touching.consume(ctx, currentEl.fillStyle);
     }
     ctx.fillStyle=currentEl.fillStyle;
     ctx.strokeStyle=currentEl.fillStyle;
@@ -119,8 +162,6 @@ Player.prototype.movePlayer = function(xAmt, yAmt, ctx) {
     ctx.fillRect(this.xPos,this.yPos,5,5);
     this.xPos+=xAmt;
     this.yPos+=yAmt;
-    let touching=currentEl.isTouchingItem(this.xPos, this.yPos);
-    if (touching) { this.consume(touching); }
     this.drawSelf(ctx);
   }
   else { console.log('cannot go to there'); }
@@ -131,12 +172,12 @@ const round5 = (x) => Math.ceil(x/5)*5;
 const randomIn = (min,max) => Math.floor(Math.random()*(max-min))+min;
 const rF = (min,max) => Math.floor(Math.random()*(max-min))+min;
 const hallwayWidth = 10;
-const minLeafSize=50;
-const maxLeafSize=500;
+const minLeafSize=40;
+const maxLeafSize=200;
 const desiredNumberOfLeaves=20;
 const playerSize = 5;
-const gameWidth=3000;
-const gameHeight=3000;
+const gameWidth=1500;
+const gameHeight=1500;
 
 let Leaf = function(x, y, width, height) { //x, y is upper-left coord
   // console.log('new leaf x, y, width, height:', x, y, width, height);
@@ -148,6 +189,7 @@ let Leaf = function(x, y, width, height) { //x, y is upper-left coord
   this.left=null;
   this.right=null;
   this.container=null;
+  this.visible=true;
 }
 
 let Container = function(x1, y1, x2, y2) {
@@ -158,16 +200,18 @@ let Container = function(x1, y1, x2, y2) {
   this.hallway=null;
   this.fillStyle=null;
   this.contents=[]; //contents is an array of entities
+  this.visible=true;
 }
 
 Container.prototype.isTouchingItem = function(xPos, yPos) {
-  for (var i=0;i<this.contents.length;i++) { //TODO optimize
-    const e=this.contents[i];
+  let ableToTouch=this.contents.filter(e=>!e.consumed&&e.visible);
+  for (var i=0;i<ableToTouch.length;i++) { //TODO optimize
+    const e=ableToTouch[i];
     if (((xPos<e.xPos+e.size)&&(xPos>=e.xPos))&&
         ((yPos<e.yPos+e.size)&&(yPos>=e.yPos)))
     {
       console.log('consume');
-      e.consume(ctx,this.fillStyle);
+      // e.consume(ctx,this.fillStyle);
       return e;
     }
   }
@@ -175,56 +219,27 @@ Container.prototype.isTouchingItem = function(xPos, yPos) {
 }
 
 Container.prototype.isMoveAllowed = function(newX, newY) {
-  //if within container, or if going into hallway, yes
   let nLowerX=newX;
   let nUpperX=newX+playerSize;
   let nLowerY=newY;
   let nUpperY=newY+playerSize;
-  if ((nLowerX>=this.x1&&nUpperX<=this.x2)&&
-  (nLowerY>=this.y1&&nUpperY<=this.y2)) {
+  if ((nLowerX>=this.x1&&nUpperX<=this.x2)&&(nLowerY>=this.y1&&nUpperY<=this.y2)) {
     return this;
   }
-  else if ((nLowerX>=this.hallway.x1&&nUpperX<=this.hallway.x2)&&
-  (nLowerY>=this.hallway.y1&&nUpperY<=this.hallway.y2)) {
-    //hallway, change player location to hallway
-    return this.hallway;
-  }
-  else if (this.prevHallway) {
-    if ((nLowerX>=this.prevHallway.x1&&nUpperX<=this.prevHallway.x2)&&
-  (nLowerY>=this.prevHallway.y1&&nUpperY<=this.prevHallway.y2)) {
-    //hallway, change player location to hallway
-    return this.prevHallway;
+  else if (this.hallway) {
+    if ((nLowerX>=this.hallway.x1&&nUpperX<=this.hallway.x2)&&(nLowerY>=this.hallway.y1&&nUpperY<=this.hallway.y2)) {
+      return this.hallway;
     }
   }
-  else {
-    return false;
+  else if (this.prevHallway) {
+    if ((nLowerX>=this.prevHallway.x1&&nUpperX<=this.prevHallway.x2)&&(nLowerY>=this.prevHallway.y1&&nUpperY<=this.prevHallway.y2)) {
+      return this.prevHallway;
+    }
   }
-
-  // this.contents.forEach((item)=>{
-  //   Player.prototype.isMoveAllowed = function(newX, newY) {
-  //     for (var i=0;i<this.entities.length;i++) { //TODO optimize
-  //       let e=this.entities[i];
-  //       if ((((e.x1<=newX)&&(e.x2>=newX+playerSize)))&&
-  //       ((e.y1<=newY)&&(e.y2>=newY+playerSize))) {
-  //         return e;
-  //       }
-  //     }
-  //     return false;
-  //   }
-  //   for (var i=0;i<this.entities.length;i++) { //TODO optimize
-  //     let e=this.entities[i];
-  //     if ((((e.x1<=newX)&&(e.x2>=newX+playerSize)))&&
-  //     ((e.y1<=newY)&&(e.y2>=newY+playerSize))) {
-  //       return e;
-  //     }
-  //   }
-  //   return false;
-  // })
+  else { return false; }
 }
 
-Hallway.prototype.isTouchingItem = function() {
-  return false;
-}
+Hallway.prototype.isTouchingItem = function() { return false; }
 
 Hallway.prototype.isMoveAllowed = function(newX, newY) {
     //if within hallway, or if going into new hallway or container, yes
@@ -251,15 +266,9 @@ Hallway.prototype.isMoveAllowed = function(newX, newY) {
       }
       else if ((nLowerX>=nextC.x1&&nUpperX<=nextC.x2)&&
       (nLowerY>=nextC.y1&&nUpperY<=nextC.y2)) {
-        //hallway, change player location to hallway
         return nextC;
       }
     }
-    // else if ((nLowerX>=this.hallway.x1&&nUpperX<=this.hallway.x2)&&
-    // (nLowerY>=this.hallway.y1&&nUpperY<=this.hallway.y2)) {
-    //   //hallway, change player location to hallway
-    //   return this.hallway;
-    // }
     else {
       return false;
     }
@@ -276,11 +285,12 @@ Leaf.prototype.addContainer = function() {
 Leaf.prototype.drawSelf = function(ctx) {
   let C=this.container;
   if (!C.fillStyle) {
-    let grd=ctx.createLinearGradient(C.x1,C.y1,C.x2,C.y2);
-    grd.addColorStop(0, `rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`);
-    grd.addColorStop(0.5, `rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`);
-    grd.addColorStop(1,'#480048');
-    C.fillStyle=grd;
+    // let grd=ctx.createLinearGradient(C.x1,C.y1,C.x2,C.y2);
+    // grd.addColorStop(0, `rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`);
+    // grd.addColorStop(0.5, `rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`);
+    // grd.addColorStop(1,'#480048');
+    // C.fillStyle=grd;
+    C.fillStyle='#CCC';
   }
   ctx.fillStyle=C.fillStyle;
   ctx.fillRect(C.x1, C.y1, C.x2-C.x1, C.y2-C.y1);
@@ -299,7 +309,7 @@ Leaf.prototype.splitLeaf = function() {
   if (this.width>this.height && this.height/this.width >= 0.5) { splitVertical=true; }
   else if (this.height>this.width && this.width/this.height >= 0.5) { splitVertical=false; }
 
-  if (splitVertical) { //vertical split
+  if (splitVertical) {
     let splitLoc=randomIn(minLeafSize,max);
     this.left=new Leaf(this.x, this.y, splitLoc, this.height);
     this.right=new Leaf(this.x+splitLoc, this.y, this.width-splitLoc, this.height);
@@ -332,7 +342,7 @@ Container.prototype.randomPosToFit = function (size) {
       y2:randY+size
     };
   }
-  for (var m=0;m<10;m++) {
+  for (var m=0;m<10;m++) { //try ten random placements
     let randX=round5(randomIn(this.x1,(this.x2-size)));
     let randY=round5(randomIn(this.y1,(this.y2-size)));
     let candidate={
@@ -364,34 +374,25 @@ if (rect1.x < rect2.x + rect2.width &&
 }
 
 Container.prototype.calculateHallway = function(dest, containerList) {
-  //TODO collision detection w/ containerList
-
   let widthRO=rangeOverlap([dest.x1,dest.x2],[this.x1, this.x2]);
   let heightRO=rangeOverlap([dest.y1, dest.y2],[this.y1, this.y2]);
-  // widthRO, heightRO);
   if ((widthRO[1]-widthRO[0]>0)&&((widthRO[1]-widthRO[0])>hallwayWidth)) {
     let xCoord=round5(randomIn(widthRO[0]+hallwayWidth, widthRO[1]-hallwayWidth));
     let yCoord=round5(this.y2);
     let distance=dest.y1-this.y2;
-    // console.log(this.id, 'width overlap draw vertical line', widthRO);
-    // console.log('xcoord, ycoord, distance', xCoord, yCoord, distance);
     this.hallway=new Hallway(xCoord, yCoord, xCoord+hallwayWidth, yCoord+distance,'V');
-    // this.hallway.connectsNodes=[this.id, dest.id];
     this.hallway.connectsNodes=[this, dest];
     dest.prevHallway=this.hallway;
   }
   else if ((heightRO[1]-heightRO[0]>0)&&((heightRO[1]-heightRO[0])>hallwayWidth)) {
-    // console.log(this.id, 'height overlap draw horizontal line', heightRO);
     let yCoord=round5(randomIn(heightRO[0]+hallwayWidth, heightRO[1]-hallwayWidth));
     let xCoord=round5(this.x2);
     let distance=dest.x1-this.x2;
     this.hallway=new Hallway(xCoord, yCoord, xCoord+distance, yCoord+hallwayWidth, 'H');
-    // this.hallway.connectsNodes=[this.id, dest.id];
     this.hallway.connectsNodes=[this, dest];
     dest.prevHallway=this.hallway;
   }
   else {
-    // console.log(this.id, 'need to draw both vert and horiz lines');
     let destFartherRight = (dest.x2-this.x2>0) ? true : false;
     let destFartherUp = (this.y2-dest.y1>0) ? true : false;
     let xDistance=Math.abs(dest.x1-this.x2);
@@ -501,20 +502,30 @@ Container.prototype.calculateHallway = function(dest, containerList) {
   }
 }
 
-Container.prototype.drawSelf = function(ctx) {
-  this.contents.map(e=>e.drawSelf(ctx));
-}
+Container.prototype.drawSelf = function(ctx) { this.contents.map(e=>e.drawSelf(ctx)); }
 
 let Game = function() {
   this.level=1;
+  this.hidden=true;
 };
+
+Game.prototype.clearCache = function() {
+  this.entities=null;
+  this.leaves=null;
+}
 
 Game.prototype.drawEntities = function() {
   this.entities.map(e=>e.drawSelf(this.ctx));
   //TODO test to assert everything is cenetered on 5s
-  console.log(this.entities.filter(e=>!e.id).filter(e=>((e.x1%5!==0||e.x2%5!==0)||(e.y1%5!==0||e.y2%5!==0))));
+  // console.log(this.entities.filter(e=>!e.id).filter(e=>((e.x1%5!==0||e.x2%5!==0)||(e.y1%5!==0||e.y2%5!==0))));
   let contents=this.entities.map(e=>e.contents ? e.contents : null).filter(e=>e);
-  flattenArr(contents).filter(s=>!s.consumed).map(s=>s.drawSelf(this.ctx));
+  flattenArr(contents).filter(e=>e.visible&&!e.consumed).map(s=>s.drawSelf(this.ctx));
+}
+
+Game.prototype.generateTeleport = function() { //TODO change to last containers
+  let tPorter=this.entities.map(e=>e.contents)[0].filter(e=>e.type==='teleporter')[0];
+  tPorter.visible=true;
+  tPorter.drawSelf(this.ctx);
 }
 
 Game.prototype.populateEntities = function(entities, containers) {
@@ -523,17 +534,20 @@ Game.prototype.populateEntities = function(entities, containers) {
   { type: 'health', minVal: 5, maxVal: 20, minInstances: 1, maxInstances: 5, size: 5 }];
 */
   entities.forEach((E)=>{
-    console.log(E);
     let numberOfItems = E.minInstances===E.maxInstances ? E.maxInstances : randomIn(E.minInstances, E.maxInstances);
     for (var j=0;j<numberOfItems;j++) {
       for (var q=0;q<containers.length;q++) {
         if (E.limitToContainers) {
-          if (E.limitToContainers.indexOf(q)===-1) { continue; }
+          if (!E.limitToContainers==='last'&&E.limitToContainers.indexOf(q)===-1) { continue; }
+          else if (E.limitToContainers==='last'&&q!==containers.length-1) { continue; }
         }
           let pos=containers[q].randomPosToFit(E.size);
           if (pos) { //randomPosToFit returns false if we cannot place the item
-            let itemVal=randomIn(E.minVal,E.maxVal);
-            containers[q].contents.push(new Item(pos.x1, pos.y1, E.size, E.type, itemVal, E.consumedCallback));
+            let itemVal=E.minVal&&E.maxVal ? randomIn(E.minVal,E.maxVal) : E.value;
+            switch (E.type) { //TODO refine switch
+              case 'enemy': containers[q].contents.push(new Enemy(pos.x1, pos.y1,E.value.XP,E.value.damage,E.value.health,this.level,E.consumedCallback)); break;
+              default: containers[q].contents.push(new Item(pos.x1, pos.y1, E.size, E.type, itemVal, E.consumedCallback, E.visible));
+            }
           }
         }
       }
@@ -541,6 +555,7 @@ Game.prototype.populateEntities = function(entities, containers) {
 }
 
 Game.prototype.generateBoard = function() {
+  console.log('called',this);
   /* CREATE LEAVES */
   let root = new Leaf(0,0,gameWidth,gameHeight);
   let leafLitter=[root];
@@ -576,9 +591,41 @@ Game.prototype.generateBoard = function() {
   this.P.currentLocation=containers[0];
   let hallways=flattenArr(containers.map(c=>c.hallway).filter(e=>e).map(h=>h.getSubHallways()));
 
-  let entityManifest = [
+  let entityManifest = this.calculateEntitiesForLevel(this.level);
+  this.populateEntities(entityManifest, containers);
+  this.leaves=leaves;
+  this.entities=containers.concat(hallways,leaves).filter(e=>e);
+  console.log(this.entities);
+}
+
+Game.prototype.calculateEntitiesForLevel = function(level) {
+  const weapons=[
+    {name:'fists', damage:5},
+    {name:'rocks', damage:5},
+    {name:'hammer', damage:10},
+    {name:'chisel', damage:10},
+    {name:'nun-chucks', damage:15},
+    {name:'sword', damage:15},
+    {name:'cannon', damage:15},
+    {name:'thePowerOfMind', damage:15}
+  ];
+
+  const enemies=[
+    {name:'fists', damage:5},
+    {name:'rocks', damage:5},
+    {name:'hammer', damage:10},
+    {name:'chisel', damage:10},
+    {name:'nun-chucks', damage:15},
+    {name:'sword', damage:15},
+    {name:'cannon', damage:15},
+    {name:'thePowerOfMind', damage:15}
+  ];
+
+
+  return [
     {
       type: 'health',
+      visible: true,
       size: 5,
       minVal: 5,
       maxVal: 20,
@@ -587,48 +634,103 @@ Game.prototype.generateBoard = function() {
     },
     {
       type: 'weapon',
+      visible: true,
       size: 10,
-      minVal: 4,
-      maxVal: 14,
+      value: weapons[0],
       minInstances: 1,
       maxInstances: 1,
       limitToContainers: [0,1]
     },
     {
       type: 'teleporter',
+      visible: false,
       size: 20,
       minVal: 5,
       maxVal: 6,
       minInstances: 1,
       maxInstances: 2,
       limitToContainers: [0],
-      consumedCallback: () => {
-        this.nextLevel();
-
-        console.log('new level:', level);
-      }
+      consumedCallback: () => this.nextLevel()
+    },
+    {
+      type: 'enemy',
+      size: 5,
+      value: {
+        XP: randomIn(level, level+1),
+        damage: randomIn(level*10, level*20),
+        health: 50,
+        level: level
+      },
+      minInstances: 1,
+      maxInstances: 1,
+      limitToContainers: [0],
+      consumedCallback: () => this.generateTeleport()
+    },
+    {
+      type: 'enemy', //boss
+      size: 5,
+      value: {
+        XP: randomIn(level, level+1),
+        damage: randomIn(level*10, level*20),
+        health: 50,
+        level: level
+      },
+      minInstances: 1,
+      maxInstances: 2,
+      limitToContainers: 'last'
     }
   ];
-  // ,
-  // {
-  //   type: 'weapon',
-  //   minVal: ,
-  //   maxVal:
-  //   minInstances: ,
-  //   maxInstances:
-  // }];
+}
 
-  this.populateEntities(entityManifest, containers);
+let Enemy = function(xPos, yPos, XP, damage, health, level, consumedCallback) {
+  //health, XP, level, damage
+  this.type='enemy';
+  this.visible=true;
+  this.consumed=false;
+  this.xPos=xPos;
+  this.yPos=yPos;
+  this.size=5;
+  this.ctx=null;
+  this.XP=XP;
+  this.damage=damage;
+  this.health=50||health;
+  this.level=level;
+  this.gainFromKill=Math.floor(XP/level);
+  this.consumedCallback=consumedCallback;
+}
 
-  this.leaves=leaves;
-  this.entities=containers.concat(hallways,leaves).filter(e=>e);
-  console.log(this.entities);
+Enemy.prototype.drawSelf = function(ctx) {
+  if (this.consumed) { return false; }
+  ctx.fillStyle='#FF0000';
+  ctx.fillRect(this.xPos,this.yPos,this.size,this.size);
+}
+
+Enemy.prototype.consume = function(ctx, oldBackgroundColor) {
+  ctx.fillStyle=oldBackgroundColor;
+  ctx.fillRect(this.xPos,this.yPos,this.size,this.size);
+  this.consumed=true;
+  console.log(this.consumedCallback);
+  if (this.consumedCallback) { console.log('called'); this.consumedCallback(); }
+}
+
+Game.prototype.calculateEnemiesForLevel = function(level) {
+  //should have one enemy per container, some blocking hallways.
 }
 
 Game.prototype.nextLevel = function () {
   this.level++;
-  this.ctx.clearRect(0, 0, this.cvs.width, this.cvs.height);//clear the viewport AFTER the matrix is reset
-  this.initLevel();
+  this.ctx.clearRect(0, 0, gameWidth, gameHeight);//clear the viewport AFTER the matrix is reset
+  this.ctx.setTransform(1,0,0,1,0,0);//reset the transform matrix as it is cumulative
+  this.generateBoard();
+  var camX = this.P.xPos;
+  var camY = this.P.yPos;
+  this.ctx.translate(this.cvs.width/2-camX,this.cvs.height/2-camY);
+  this.drawEntities();
+  this.P.drawSelf(this.ctx);
+}
+
+Game.prototype.toggleHide = function () {
+  this.hidden = !this.hidden;
 }
 
 Game.prototype.initLevel = function(P) {
@@ -637,25 +739,24 @@ Game.prototype.initLevel = function(P) {
   ctx=this.ctx;
   if(P) { this.P=P; }
   this.generateBoard();
-  this.ctx.setTransform(1,0,0,1,0,0);//reset the transform matrix as it is cumulative
-  this.ctx.clearRect(0, 0, this.cvs.width, this.cvs.height);//clear the viewport AFTER the matrix is reset
-  //Clamp the camera position to the world bounds while centering the camera around the player
   var camX = this.P.xPos;
   var camY = this.P.yPos;
-  this.ctx.fillStyle='#000';
-  this.ctx.fillRect(0,0,this.cvs.width,this.cvs.height);
-  this.ctx.translate(this.cvs.width/2-camX,this.cvs.height/2-camY);
-  // Save the state, so we can undo the clipping
-  this.ctx.save();
-   // Create a circle
-   this.ctx.beginPath();
-   this.ctx.arc(camX, camY, 100, 0, Math.PI * 2, false);
-   // Clip to the current path
-   this.ctx.clip();
-   //draw
+
+  if (this.hidden) {
+    this.ctx.setTransform(1,0,0,1,0,0);//reset the transform matrix as it is cumulative
+    this.ctx.clearRect(0, 0, this.cvs.width, this.cvs.height);//clear the viewport AFTER the matrix is reset
+    //Clamp the camera position to the world bounds while centering the camera around the player
+    this.ctx.fillStyle='#000';
+    this.ctx.fillRect(0,0,this.cvs.width,this.cvs.height);
+    this.ctx.translate(this.cvs.width/2-camX,this.cvs.height/2-camY);
+    this.ctx.save();
+    this.ctx.beginPath();
+    this.ctx.arc(camX, camY, 100, 0, Math.PI * 2, false);
+    this.ctx.clip();
+  }
   this.drawEntities();
   this.P.drawSelf(this.ctx);
-  this.ctx.restore();
+  if (this.hidden) { this.ctx.restore(); }
 }
 
 module.exports = {Game, Player};

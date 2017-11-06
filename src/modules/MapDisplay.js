@@ -6,12 +6,20 @@ export default class MapDisplay extends Component {
     super(props);
     this.state={redrawDistance:10, hide:true, keyHeld:null, steps:0, keyTimeout:null, ctx:null, P:null};
     this.movePlayer=this.movePlayer.bind(this);
+    this.playerChange=this.playerChange.bind(this);
+  }
+
+  playerChange = (P) => {
+    console.log(this.state.P,'playerchg');
+    this.setState({P:P});
   }
 
   componentDidMount() {
     let P = new Player();
+    P.callbackChange = this.playerChange;
     let G = new Game();
     G.initLevel(P);
+    G.resetCallback=this.movePlayer;
     let cvs = document.getElementById('game');
     let ctx = cvs.getContext('2d');
     this.setState({G,P,ctx,cvs});
@@ -31,7 +39,6 @@ export default class MapDisplay extends Component {
         var camY = this.state.P.yPos;
         this.setState({camX:camX, camY:camY});
       }
-
       const C=this.state.ctx;
       switch (key) {
         case 'KeyW': this.state.P.movePlayer(0,-step,C); break;
@@ -100,25 +107,36 @@ if (this.state.hide) {
         this.setState({repeat});
       }
       if (e.code==='KeyH') {
-        this.setState({hide:!this.state.hide}, ()=>this.draw());
+        this.setState({hide:!this.state.hide}, ()=>{
+          this.state.G.toggleHide();
+          this.draw();
+        });
       }
       let steps = e.ctrlKey ? 20 : 5;
       this.setState({steps:this.state.steps+=steps});
-      console.log(this.state.redrawDistance);
-      if ((Math.abs(this.state.P.xPos-this.state.camX)>this.state.redrawDistance)||
-      (Math.abs(this.state.P.yPos-this.state.camY)>25))
+      if ((Math.abs(this.state.P.xPos-this.state.camX)>this.state.redrawDistance)||(Math.abs(this.state.P.yPos-this.state.camY)>25))
       {
         this.draw();
       }
-      // if (this.state.steps%10===0) {
-      //   this.draw();
-      //   this.setState({steps:0});
-      // }
       this.movePlayer(e.code, steps);
     }
   }
 
   render() {
-    return(<div id="map"><canvas id="game" width="500" height="500" /></div>);
+    let W=null;
+    if (this.state.P&&this.state.P.weapon) {
+      W=this.state.P.weapon.map((e,idx)=>{ return <li key={idx}>{e.name}, damage: {e.damage}</li> });
+    }
+    return(<div>
+      <div id="info">Health: {this.state.P&&this.state.P.health || 0}<br />
+      Weapons: {this.state.P&&this.state.P.weapon&&this.state.P.weapon.map(
+        (e,idx)=>{ return <li key={idx}>{e.name}, damage: {e.damage}</li> }
+      )||'none'}<br />
+      XP: {this.state.P&&this.state.P.XP || ''}
+      </div>
+      <div id="map">
+    <canvas id="game" width="500" height="500" />
+    </div>
+  </div>);
   }
 }
