@@ -73,23 +73,38 @@ Item.prototype.drawSelf = function(ctx) {
 }
 
 Item.prototype.consume = function(ctx, oldBackgroundColor) {
-  ctx.fillStyle=oldBackgroundColor;
-  ctx.fillRect(this.xPos,this.yPos,this.size,this.size);
-  this.consumed=true;
-  console.log(this);
   if (this.consumedCallback) { this.consumedCallback(); }
+  else {
+    ctx.fillStyle=oldBackgroundColor;
+    ctx.fillRect(this.xPos,this.yPos,this.size,this.size);
+    this.consumed=true;
+    console.log(this);
+  }
 }
 
 Player.prototype.currentlyInside = function() {
-  // for (var i=0;i<this.entities.length;i++) { //TODO optimize
-  //   const e=this.entities[i];
-  //   if ((((e.x1<=this.xPos)&&(e.x2>=this.xPos+playerSize)))&&
-  //   ((e.y1<=this.yPos)&&(e.y2>=this.yPos+playerSize))) {
-  //     e;
-  //     return e;
-  //   }
-  // }
   return this.currentLocation;
+}
+
+Player.prototype.animate = function(ctx) {
+  let red='#F00';
+  let white='#FFF';
+  ctx.fillStyle=red;
+  console.log('player animate');
+  let animCt=0;
+  let interval=setInterval(()=>{
+    if (animCt===6) {
+      clearInterval(interval);
+      ctx.clearRect(this.xPos,this.yPos,playerSize,playerSize);
+      ctx.fillStyle=white;
+      ctx.fillRect(this.xPos,this.yPos,playerSize,playerSize);
+    }
+    animCt++;
+    ctx.clearRect(this.xPos,this.yPos,playerSize,playerSize);
+    animCt%2!==0 ? ctx.fillStyle=white : ctx.fillStyle=red;
+    ctx.fillRect(this.xPos,this.yPos,playerSize,playerSize);
+    console.log('animation whoa');
+  },100);
 }
 
 Player.prototype.consume = function(e) {
@@ -106,16 +121,12 @@ Player.prototype.consume = function(e) {
 
 Player.prototype.drawSelf = function(ctx) {
   ctx.fillStyle='#FFF';
-  ctx.fillRect(this.xPos,this.yPos,5,5);
+  ctx.fillRect(this.xPos,this.yPos,playerSize,playerSize);
 }
 
 Player.prototype.setPos = function(xPos, yPos) {
   this.xPos=xPos;
   this.yPos=yPos;
-}
-
-Player.prototype.attack = function() {
-
 }
 
 const fight = (a,b) => {
@@ -147,6 +158,8 @@ Player.prototype.movePlayer = function(xAmt, yAmt, ctx) {
     let touching=currentEl.isTouchingItem(this.xPos+xAmt, this.yPos+yAmt);
     console.log(touching,'t');
     if (touching.type==='enemy') {
+      this.animate(ctx);
+      touching.animate(ctx);
       if (fight(this,touching)) {
         touching.consume(ctx, currentEl.fillStyle);
       }
@@ -211,7 +224,6 @@ Container.prototype.isTouchingItem = function(xPos, yPos) {
         ((yPos<e.yPos+e.size)&&(yPos>=e.yPos)))
     {
       console.log('consume');
-      // e.consume(ctx,this.fillStyle);
       return e;
     }
   }
@@ -629,8 +641,8 @@ Game.prototype.calculateEntitiesForLevel = function(level) {
       size: 5,
       minVal: 5,
       maxVal: 20,
-      minInstances: 5,
-      maxInstances: 20
+      minInstances: 2,
+      maxInstances: 5
     },
     {
       type: 'weapon',
@@ -663,7 +675,7 @@ Game.prototype.calculateEntitiesForLevel = function(level) {
       },
       minInstances: 1,
       maxInstances: 1,
-      limitToContainers: [0],
+      limitToContainers: [0], //TODO switch generateTeleport to BOSS for container
       consumedCallback: () => this.generateTeleport()
     },
     {
@@ -703,6 +715,27 @@ Enemy.prototype.drawSelf = function(ctx) {
   if (this.consumed) { return false; }
   ctx.fillStyle='#FF0000';
   ctx.fillRect(this.xPos,this.yPos,this.size,this.size);
+}
+
+Enemy.prototype.animate = function(ctx) {
+  let red='#F00';
+  let orange='#A0E';
+  ctx.fillStyle=red;
+  console.log('player animate');
+  let animCt=0;
+  let interval=setInterval(()=>{
+    if (animCt===7) {
+      clearInterval(interval);
+      ctx.clearRect(this.xPos,this.yPos,playerSize,playerSize);
+      ctx.fillStyle=orange;
+      ctx.fillRect(this.xPos,this.yPos,playerSize,playerSize);
+    }
+    animCt++;
+    ctx.clearRect(this.xPos,this.yPos,playerSize,playerSize);
+    animCt%2!==0 ? ctx.fillStyle=orange : ctx.fillStyle=red;
+    ctx.fillRect(this.xPos,this.yPos,playerSize,playerSize);
+    console.log('animation whoa');
+  },100);
 }
 
 Enemy.prototype.consume = function(ctx, oldBackgroundColor) {
