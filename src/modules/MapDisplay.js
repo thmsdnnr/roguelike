@@ -4,7 +4,7 @@ import {Game, Player} from './BinaryTree.js';
 export default class MapDisplay extends Component {
   constructor(props) {
     super(props);
-    this.state={redrawDistance:10, hide:true, keyHeld:null, steps:0, keyTimeout:null, ctx:null, P:null};
+    this.state={showHint: true, redrawDistance:10, hide:true, keyHeld:null, steps:0, keyTimeout:null, ctx:null, P:null};
     this.movePlayer=this.movePlayer.bind(this);
     this.playerChange=this.playerChange.bind(this);
   }
@@ -87,7 +87,10 @@ if (this.state.hide) {
     this.state.ctx.save();
     // Create a circle
     this.state.ctx.beginPath();
-    this.state.ctx.arc(camX, camY, 100, 0, Math.PI * 2, false);
+    this.state.ctx.lineWidth = 5;
+    this.state.ctx.strokeStyle = 'green';
+    this.state.ctx.arc(camX, camY, 105, 0, Math.PI * 2, false);
+    this.state.ctx.stroke();
     this.state.ctx.clip();
   }
     this.state.G.drawEntities();
@@ -99,18 +102,21 @@ if (this.state.hide) {
 
   handleKeyPress = (e) => {
     if (this.state) {
-      if (e.code==='KeyP') {
-        clearInterval(this.state.repeat);
-      }
-      if (e.code==='KeyG') {
-        let repeat=setInterval(()=>{this.state.G.initLevel(this.state.P);},2000);
-        this.setState({repeat});
-      }
+      // if (e.code==='KeyP') {
+      //   clearInterval(this.state.repeat);
+      // }
+      // if (e.code==='KeyG') {
+      //   let repeat=setInterval(()=>{this.state.G.initLevel(this.state.P);},2000);
+      //   this.setState({repeat});
+      // }
       if (e.code==='KeyH') {
         this.setState({hide:!this.state.hide}, ()=>{
           this.state.G.toggleHide();
           this.draw();
         });
+      }
+      if (e.code==='KeyL') {
+        this.state.G.logEntities();
       }
       let steps = e.ctrlKey ? 20 : 5;
       this.setState({steps:this.state.steps+=steps});
@@ -124,15 +130,52 @@ if (this.state.hide) {
 
   render() {
     let W=null;
-    if (this.state.P&&this.state.P.weapon) {
-      W=this.state.P.weapon.map((e,idx)=>{ return <li key={idx}>{e.name}, damage: {e.damage}</li> });
+    let moveHint;
+    const P=this.state.P;
+    if (P) {
+    if (P.weapon) {
+      W=P.weapon.map((e,idx)=>{ return <li key={idx}>{e.name}, damage: {e.damage}</li> });
     }
+    if (P.moveHint&&this.state.showHint) {
+      if (P.moveHint.xDist<50&&P.moveHint.yDist<50) {
+        //do nothing
+      }
+      else {
+        let normX, normY, absX, absY;
+        absX=Math.abs(P.moveHint.xDist);
+        absY=Math.abs(P.moveHint.yDist);
+        if (absX>absY) {
+          normX=1;
+          normY=absY/absX;
+        }
+        else if (absY>absX) {
+          normY=1;
+          normX=absX/absY;
+        }
+        else { //equal
+          normX=1;
+          normY=1;
+        }
+        let Q;
+        if ((P.moveHint.xDist>0&&P.moveHint.yDist>0)) { Q=0; }
+        else if ((P.moveHint.xDist<0&&P.moveHint.yDist>0)) { Q=1; }
+        else if ((P.moveHint.xDist<0&&P.moveHint.yDist<0)) { Q=2; }
+        else if ((P.moveHint.xDist>0&&P.moveHint.yDist<0)) { Q=3; }
+        let degAngle=Math.atan(normY/normX)*(180/Math.PI)+(Q)*90;
+        let arrows=['','→','↗','↑','↖','←','↙','↓','↘'];
+        let radAngle=(degAngle*(Math.PI))/180;
+        moveHint=arrows[Math.ceil(degAngle/45)];
+        // moveHint = (<div style={{transform: `rotate(-${degAngle}deg)`, transformOrigin: 'center'}}>→</div>);
+      }
+    }
+  }
     return(<div>
       <div id="info">Health: {this.state.P&&this.state.P.health || 0}<br />
       Weapons: {this.state.P&&this.state.P.weapon&&this.state.P.weapon.map(
         (e,idx)=>{ return <li key={idx}>{e.name}, damage: {e.damage}</li> }
       )||'none'}<br />
-      XP: {this.state.P&&this.state.P.XP || ''}
+      XP: {this.state.P&&this.state.P.XP || ''}<br />
+      movement hint: {moveHint && moveHint}
       </div>
       <div id="map">
     <canvas id="game" width="500" height="500" />

@@ -9,3 +9,8 @@ canvas#game {
   padding: 10px;
   border: 1px solid black;
 }
+
+div#info {
+  padding: 10px;
+  font-family: Courier;
+}

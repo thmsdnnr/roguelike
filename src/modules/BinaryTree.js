@@ -11,6 +11,7 @@ let Hallway = function(x1, y1, x2, y2, direction) {
   this.subHallway=null;
   this.fillStyle=null;
   this.visible=true;
+  this.type='hallway';
 }
 
 Hallway.prototype.getSubHallways = function() {
@@ -150,9 +151,36 @@ const fight = (a,b) => {
   }
 };
 
+const compass = function(a, b) {
+  let xDist=b.x1-a.x1;
+  let yDist=a.y1-b.y1;
+  let yDirection = b.y1>a.y1 ? 'DOWN' : 'UP';
+  //if y is down then either no xDirection or left or right
+  let xDirection = b.x1>a.x1 ? 'RIGHT' : 'LEFT';
+  return {xDist,yDist,xDirection,yDirection};
+  // console.log(xDist, xDirection, yDist, yDirection);
+}
+
+Player.prototype.movementHint = function(ctx) {
+  let C=this.currentLocation;
+  if (C.type==='container'&&C.hallway) { //we are in a container or...
+    this.moveHint=compass({x1:this.xPos,y1:this.yPos},{x1:C.hallway.x1,y1:C.hallway.y1});
+  }
+  else if (C.type==='hallway'&&C.connectsNodes[1]) { //we are in a hallway
+    C=C.connectsNodes[1];
+    this.moveHint=compass({x1:this.xPos,y1:this.yPos},{x1:C.x1,y1:C.y1});
+  }
+  else { //in the last container, movement hint is "DEFEAT THE BOSS"
+    this.moveHint='defeat the boss to advance';
+  }
+}
+
 Player.prototype.movePlayer = function(xAmt, yAmt, ctx) {
   let currentEl=this.currentlyInside();
+  this.movementHint(ctx);
   let nextEl = this.currentLocation.isMoveAllowed(this.xPos+xAmt, this.yPos+yAmt);
+  console.log('curr:',currentEl,'next:',nextEl);
+  console.log(this.xPos+xAmt, this.yPos+yAmt);
   if (nextEl) {
     this.currentLocation=nextEl;
     let touching=currentEl.isTouchingItem(this.xPos+xAmt, this.yPos+yAmt);
@@ -181,16 +209,16 @@ Player.prototype.movePlayer = function(xAmt, yAmt, ctx) {
 }
 
 const flattenArr = (arr) => [].concat(...arr);
-const round5 = (x) => Math.ceil(x/5)*5;
+const round5 = (x) => Math.floor(x/5)*5;
 const randomIn = (min,max) => Math.floor(Math.random()*(max-min))+min;
 const rF = (min,max) => Math.floor(Math.random()*(max-min))+min;
 const hallwayWidth = 10;
-const minLeafSize=40;
-const maxLeafSize=200;
-const desiredNumberOfLeaves=20;
+const minLeafSize=50;
+const maxLeafSize=100;
+const desiredNumberOfLeaves=10;
 const playerSize = 5;
-const gameWidth=1500;
-const gameHeight=1500;
+const gameWidth=1000;
+const gameHeight=1000;
 
 let Leaf = function(x, y, width, height) { //x, y is upper-left coord
   // console.log('new leaf x, y, width, height:', x, y, width, height);
@@ -203,6 +231,7 @@ let Leaf = function(x, y, width, height) { //x, y is upper-left coord
   this.right=null;
   this.container=null;
   this.visible=true;
+  this.type='leaf'
 }
 
 let Container = function(x1, y1, x2, y2) {
@@ -214,15 +243,16 @@ let Container = function(x1, y1, x2, y2) {
   this.fillStyle=null;
   this.contents=[]; //contents is an array of entities
   this.visible=true;
+  this.type='container'
 }
 
 Container.prototype.isTouchingItem = function(xPos, yPos) {
+  let playerRect={x1:xPos,x2:xPos+playerSize,y1:yPos,y2:yPos+playerSize};
   let ableToTouch=this.contents.filter(e=>!e.consumed&&e.visible);
-  for (var i=0;i<ableToTouch.length;i++) { //TODO optimize
+  for (var i=0;i<ableToTouch.length;i++) {
     const e=ableToTouch[i];
-    if (((xPos<e.xPos+e.size)&&(xPos>=e.xPos))&&
-        ((yPos<e.yPos+e.size)&&(yPos>=e.yPos)))
-    {
+    let itemRect={x1:e.xPos,x2:e.xPos+e.size,y1:e.yPos,y2:e.yPos+e.size};
+    if (doesCollide(playerRect,itemRect)) {
       console.log('consume');
       return e;
     }
@@ -231,64 +261,45 @@ Container.prototype.isTouchingItem = function(xPos, yPos) {
 }
 
 Container.prototype.isMoveAllowed = function(newX, newY) {
-  let nLowerX=newX;
-  let nUpperX=newX+playerSize;
-  let nLowerY=newY;
-  let nUpperY=newY+playerSize;
-  if ((nLowerX>=this.x1&&nUpperX<=this.x2)&&(nLowerY>=this.y1&&nUpperY<=this.y2)) {
-    return this;
+  let playerRect={x1:newX,x2:newX+playerSize,y1:newY,y2:newY+playerSize};
+  let spaceRect={x1:this.x1,x2:this.x2,y1:this.y1,y2:this.y2};
+  if (doesCollide(playerRect, spaceRect)) { return this; }
+  if (this.hallway) {
+    let H=this.hallway;
+    let hallwayRect={x1:H.x1,x2:H.x2,y1:H.y1,y2:H.y2};
+    console.log(playerRect, hallwayRect);
+    if (doesCollide(playerRect, hallwayRect)) { return this.hallway; }
   }
-  else if (this.hallway) {
-    if ((nLowerX>=this.hallway.x1&&nUpperX<=this.hallway.x2)&&(nLowerY>=this.hallway.y1&&nUpperY<=this.hallway.y2)) {
-      return this.hallway;
-    }
+  if (this.prevHallway) {
+    let H=this.prevHallway;
+    let hallwayRect={x1:H.x1,x2:H.x2,y1:H.y1,y2:H.y2};
+    console.log(playerRect, hallwayRect);
+    if (doesCollide(playerRect, hallwayRect)) { return this.prevHallway; }
   }
-  else if (this.prevHallway) {
-    if ((nLowerX>=this.prevHallway.x1&&nUpperX<=this.prevHallway.x2)&&(nLowerY>=this.prevHallway.y1&&nUpperY<=this.prevHallway.y2)) {
-      return this.prevHallway;
-    }
-  }
-  else { return false; }
+  return false;
 }
 
 Hallway.prototype.isTouchingItem = function() { return false; }
 
 Hallway.prototype.isMoveAllowed = function(newX, newY) {
     //if within hallway, or if going into new hallway or container, yes
-    let nLowerX=newX;
-    let nUpperX=newX+playerSize;
-    let nLowerY=newY;
-    let nUpperY=newY+playerSize;
-    if ((nLowerX>=this.x1&&nUpperX<=this.x2)&&
-    (nLowerY>=this.y1&&nUpperY<=this.y2)) {
-      return this;
-    }
-    else if (this.connectsNodes) {
+    let playerRect={x1:newX,x2:newX+playerSize,y1:newY,y2:newY+playerSize};
+    let spaceRect={x1:this.x1,x2:this.x2,y1:this.y1,y2:this.y2};
+    if (doesCollide(playerRect,spaceRect)) { return this; }
+    if (this.connectsNodes) {
       let prevC=this.connectsNodes[0];
+      let prevRect={x1:prevC.x1,x2:prevC.x2,y1:prevC.y1,y2:prevC.y2};
+      if (doesCollide(playerRect,prevRect)) { return prevC; }
       let nextC=this.connectsNodes[1];
-
-      let nLowerX=newX;
-      let nUpperX=newX+playerSize;
-      let nLowerY=newY;
-      let nUpperY=newY+playerSize;
-
-      if ((nLowerX>=prevC.x1&&nUpperX<=prevC.x2)&&
-      (nLowerY>=prevC.y1&&nUpperY<=prevC.y2)) {
-        return prevC;
-      }
-      else if ((nLowerX>=nextC.x1&&nUpperX<=nextC.x2)&&
-      (nLowerY>=nextC.y1&&nUpperY<=nextC.y2)) {
-        return nextC;
-      }
+      let nextRect={x1:nextC.x1,x2:nextC.x2,y1:nextC.y1,y2:nextC.y2};
+      if (doesCollide(playerRect,nextRect)) { return nextC; }
     }
-    else {
-      return false;
-    }
+    else { return false; }
 }
 
 Leaf.prototype.addContainer = function() {
-  let width=round5(randomIn(0.7, 1)*this.width);
-  let height=round5(randomIn(0.7, 1)*this.height);
+  let width=round5(randomIn(0.7, 0.8)*this.width);
+  let height=round5(randomIn(0.7, 0.8)*this.height);
   let xPos=round5(this.x+(this.width-width)/2);
   let yPos=round5(this.y+(this.height-height)/2);
   this.container=new Container(xPos, yPos, xPos+width, yPos+height);
@@ -297,29 +308,27 @@ Leaf.prototype.addContainer = function() {
 Leaf.prototype.drawSelf = function(ctx) {
   let C=this.container;
   if (!C.fillStyle) {
-    // let grd=ctx.createLinearGradient(C.x1,C.y1,C.x2,C.y2);
-    // grd.addColorStop(0, `rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`);
-    // grd.addColorStop(0.5, `rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`);
-    // grd.addColorStop(1,'#480048');
-    // C.fillStyle=grd;
-    C.fillStyle='#CCC';
+    let grd=ctx.createLinearGradient(C.x1,C.y1,C.x2,C.y2);
+    grd.addColorStop(0, `rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`);
+    grd.addColorStop(0.5, `rgba(${rF(0,255)},${rF(0,255)},${rF(0,255)},1.0)`);
+    grd.addColorStop(1,'#480048');
+    C.fillStyle=grd;
+    // C.fillStyle='#CCC';
   }
   ctx.fillStyle=C.fillStyle;
   ctx.fillRect(C.x1, C.y1, C.x2-C.x1, C.y2-C.y1);
 }
 
 Leaf.prototype.splitLeaf = function() {
-  if (this.left!==null||this.right!==null) {
-    return false;
-  }
+  if (this.left!==null||this.right!==null) { return false; }
 
   let splitVertical = randomIn(0, 1)>=0.5;
-  let max = splitVertical ? this.width : this.height;
-  max-=minLeafSize;
+  let max = (splitVertical ? this.width : this.height)-minLeafSize;
+  // max-=minLeafSize;
   if (max <= minLeafSize) { return false; }
 
-  if (this.width>this.height && this.height/this.width >= 0.5) { splitVertical=true; }
-  else if (this.height>this.width && this.width/this.height >= 0.5) { splitVertical=false; }
+  if (this.width>this.height && this.width/this.height>=1.25) { splitVertical=true; }
+  else if (this.height>this.width && this.height/this.width >= 1.25) { splitVertical=false; }
 
   if (splitVertical) {
     let splitLoc=randomIn(minLeafSize,max);
@@ -334,12 +343,7 @@ Leaf.prototype.splitLeaf = function() {
   return true;
 }
 
-Leaf.prototype.getLeafs = function() {
-  if (!this.left&&!this.right) { return [this]; }
-  else {
-    return [].concat(this.left.getLeafs(), this.right.getLeafs());
-  }
-}
+Leaf.prototype.getLeafs = function() { return (!this.left&&!this.right) ? [this] : [].concat(this.left.getLeafs(), this.right.getLeafs()); }
 
 const rangeOverlap = (a,b) => [Math.max(a[0],b[0]),Math.min(a[1],b[1])];
 
@@ -364,28 +368,30 @@ Container.prototype.randomPosToFit = function (size) {
       y2:randY+size
     };
     for (var i=0;i<this.contents.length;i++) {
-      if (doesCollide(this.contents[i],candidate)) {
+      let I=this.contents[i];
+      let contentsRect={x1:I.xPos,x2:I.xPos+I.size,y1:I.yPos,y2:I.yPos+I.size};
+      if (doesCollide(contentsRect,candidate)) {
         break;
       }
-      if (i===this.contents.length-1) { return candidate; }
+      else if (i===this.contents.length-1) { return candidate; }
     }
   }
   return false;
 }
 
 const doesCollide = (a,b) => {
-  var rect1 = {x: a.x1, y: a.y1, width: a.x2-a.x1, height: a.y2-a.y1};
-  var rect2 = {x: b.x1, y: b.y1, width: b.x2-b.x1, height: b.y2-b.y1};
-if (rect1.x < rect2.x + rect2.width &&
-   rect1.x + rect1.width > rect2.x &&
-   rect1.y < rect2.y + rect2.height &&
-   rect1.height + rect1.y > rect2.y) {
-     return true;
-}
+  var rect1 = {x: Math.min(a.x1,a.x2), y: Math.min(a.y1,a.y2), width: Math.abs(a.x2-a.x1), height: Math.abs(a.y2-a.y1)};
+  var rect2 = {x: Math.min(b.x1,b.x2), y: Math.min(b.y1,b.y2), width: Math.abs(b.x2-b.x1), height: Math.abs(b.y2-b.y1)};
+  if (rect1.x < rect2.x + rect2.width &&
+     rect1.x + rect1.width > rect2.x &&
+     rect1.y < rect2.y + rect2.height &&
+     rect1.height + rect1.y > rect2.y) {
+       return true;
+  }
   return false;
 }
 
-Container.prototype.calculateHallway = function(dest, containerList) {
+Container.prototype.calculateHallway = function(dest, containerList, failToConnectCallback) {
   let widthRO=rangeOverlap([dest.x1,dest.x2],[this.x1, this.x2]);
   let heightRO=rangeOverlap([dest.y1, dest.y2],[this.y1, this.y2]);
   if ((widthRO[1]-widthRO[0]>0)&&((widthRO[1]-widthRO[0])>hallwayWidth)) {
@@ -427,26 +433,30 @@ Container.prototype.calculateHallway = function(dest, containerList) {
       //possible hallways: anything between xStart and xEnd
       //random hallway value between xStart+1+hallwayWidth and xEnd-1-hallwayWidth
       //check for entity intersection at each width for height from yStart to yEnd
-      for (var i=0;i+hallwayWidth+xStart<xEnd;i++) {
+      for (var i=5;i+hallwayWidth+xStart<xEnd;i+=5) { //potential vertical rect
         potentialRects.push({
-          x1:round5(xStart+i),
-          x2:round5(xStart+i+hallwayWidth),
-          y1:round5(yStart),
-          y2:round5(yEnd)
+          x1:xStart+i,
+          x2:xStart+i+hallwayWidth,
+          y1:yStart,
+          y2:yEnd
         });
       }
       let testedOptions=[];
       let good=true;
+      let possibleCollide=containerList.concat(flattenArr(containerList.map(c=>c.hallway).filter(e=>e).map(h=>h.getSubHallways())));
       for (var i=0;i<potentialRects.length;i++) {
-        good=true;
-        for (var j=0;j<containerList.length;j++) {
-          if (doesCollide(potentialRects[i],containerList[j])) { good=false; break; }
+        for (var j=0;j<possibleCollide.length;j++) {
+          if (doesCollide(potentialRects[i],possibleCollide[j])) { break; }
+          else if (j===possibleCollide.length-1) {
+            testedOptions.push(potentialRects[i]);
+          }
         }
-        if (good) { testedOptions.push(potentialRects[i]); good=false; }
       }
-
       let newY=testedOptions[Math.floor(testedOptions.length/2)];
-      if (!newY) { return false; } //cannot construct a hallway
+      if (!newY) { //cannot construct a hallway
+        failToConnectCallback();
+        return false;
+      }
       if (destFartherUp) {
         h1=new Hallway(xStart, newY.y2, newY.x1, newY.y2+hallwayWidth, 'H-first');
         h2=new Hallway(h1.x2, newY.y1, newY.x2, newY.y2+hallwayWidth, 'V-middle');
@@ -454,44 +464,56 @@ Container.prototype.calculateHallway = function(dest, containerList) {
         h1.connectsNodes=[this, h2];
       }
       else { //TODO this doesnt seem to matter up or down we just draw it
-        //go DOWN to random y-coord on destination
-        // h2=new Hallway(h1.x2, h1.y2, xStart+hallwayWidth+xDistance/2, yEnd, 'V');
-        // h1.subHallway=h2;
-      }
-      //go remaining half-distance LEFT
+      } //go remaining half-distance LEFT
       h3 = new Hallway(h2.x2, yStart, xStart+xDistance, yStart+hallwayWidth, 'H-last');
       h2.subHallway=h3;
       h2.connectsNodes=[h1, h3];
       h3.connectsNodes=[h2, dest];
       dest.prevHallway=h3;
     }
-    else { //farther left, start down TODO or up
+    else { //farther left
       xStart = round5(randomIn(this.x1+hallwayWidth,this.x2-hallwayWidth));
-      xEnd = round5(randomIn(dest.x1+hallwayWidth,dest.x2-hallwayWidth));
+      xEnd = round5(randomIn(dest.x1+hallwayWidth,dest.x2-hallwayWidth*2));
       yStart = this.y2;
       yEnd = dest.y1;
 
       let potentialRects=[]; //test different y-values
-      for (var i=0;i+hallwayWidth+yStart<yEnd;i++) {
-        potentialRects.push({
-          x1:round5(xStart),
-          x2:round5(xEnd),
-          y1:round5(yStart+i),
-          y2:round5(yStart+i+hallwayWidth)
+      for (var i=5;i+hallwayWidth+yStart<yEnd;i+=5) {
+        potentialRects.push({ //possible horizontal rect
+          x1:xStart,
+          x2:xEnd,
+          y1:yStart+i,
+          y2:yStart+i+hallwayWidth
         });
       }
       let testedOptions=[];
       let good=true;
+      let possibleCollide=containerList.concat(flattenArr(containerList.map(c=>c.hallway).filter(e=>e).map(h=>h.getSubHallways())));
       for (var i=0;i<potentialRects.length;i++) {
-        good=true;
-        for (var j=0;j<containerList.length;j++) {
-          if (doesCollide(potentialRects[i],containerList[j])) { good=false; break; }
+        for (var j=0;j<possibleCollide.length;j++) {
+          if (doesCollide(potentialRects[i],possibleCollide[j])) { break; }
+          else if (j===possibleCollide.length-1) {
+            testedOptions.push(potentialRects[i]);
+          }
         }
-        if (good) { testedOptions.push(potentialRects[i]); good=false; }
       }
 
+      // for (var i=0;i<potentialRects.length;i++) {
+      //   good=true;
+      //   for (var j=0;j<possibleCollide.length;j++) {
+      //     if (doesCollide(potentialRects[i],possibleCollide[j])) {
+      //       good=false; break;
+      //     }
+      //   }
+      //   if (good) { testedOptions.push(potentialRects[i]); good=false; }
+      // }
+
       let newX=testedOptions[Math.floor(testedOptions.length/2)];
-      if (!newX) { return false; } //cannot construct a hallway
+      console.log(potentialRects,testedOptions,newX);
+      if (!newX) { //cannot construct a hallway
+        failToConnectCallback();
+        return false;
+      }
       if (destFartherUp) {
         //TODO I believe this case (dest farther left and farther up) is impossible due to the BST
       }
@@ -501,8 +523,6 @@ Container.prototype.calculateHallway = function(dest, containerList) {
         h1.subHallway=h2;
         h1.connectsNodes=[this, h2];
       }
-        //go DOWN to random y-coord on destination
-      //go remaining half-distance DOWN
       h3 = new Hallway(h2.x1, h2.y2, h2.x1+hallwayWidth, yEnd, 'V-last'); //DOWN
       h2.subHallway=h3;
       h2.connectsNodes=[h1, h3];
@@ -510,7 +530,6 @@ Container.prototype.calculateHallway = function(dest, containerList) {
       dest.prevHallway=h3;
     }
     this.hallway=h1;
-    // console.log('farther right / up?', destFartherRight, destFartherUp);
   }
 }
 
@@ -519,6 +538,7 @@ Container.prototype.drawSelf = function(ctx) { this.contents.map(e=>e.drawSelf(c
 let Game = function() {
   this.level=1;
   this.hidden=true;
+  this.hint=true;
 };
 
 Game.prototype.clearCache = function() {
@@ -526,10 +546,14 @@ Game.prototype.clearCache = function() {
   this.leaves=null;
 }
 
+Game.prototype.logEntities = function() {
+  console.log(this.entities);
+}
+
 Game.prototype.drawEntities = function() {
   this.entities.map(e=>e.drawSelf(this.ctx));
   //TODO test to assert everything is cenetered on 5s
-  // console.log(this.entities.filter(e=>!e.id).filter(e=>((e.x1%5!==0||e.x2%5!==0)||(e.y1%5!==0||e.y2%5!==0))));
+  console.log(this.entities.filter(e=>!e.id).filter(e=>((e.x1%5!==0||e.x2%5!==0)||(e.y1%5!==0||e.y2%5!==0))));
   let contents=this.entities.map(e=>e.contents ? e.contents : null).filter(e=>e);
   flattenArr(contents).filter(e=>e.visible&&!e.consumed).map(s=>s.drawSelf(this.ctx));
 }
@@ -541,16 +565,13 @@ Game.prototype.generateTeleport = function() { //TODO change to last containers
 }
 
 Game.prototype.populateEntities = function(entities, containers) {
-  /*
-  entities is an object manifest like this:
-  { type: 'health', minVal: 5, maxVal: 20, minInstances: 1, maxInstances: 5, size: 5 }];
-*/
+  //entities => object manifest like this: { type: 'health', minVal: 5, maxVal: 20, minInstances: 1, maxInstances: 5, size: 5 }];
   entities.forEach((E)=>{
     let numberOfItems = E.minInstances===E.maxInstances ? E.maxInstances : randomIn(E.minInstances, E.maxInstances);
     for (var j=0;j<numberOfItems;j++) {
       for (var q=0;q<containers.length;q++) {
         if (E.limitToContainers) {
-          if (!E.limitToContainers==='last'&&E.limitToContainers.indexOf(q)===-1) { continue; }
+          if (E.limitToContainers!=='last'&&E.limitToContainers.indexOf(q)===-1) { continue; }
           else if (E.limitToContainers==='last'&&q!==containers.length-1) { continue; }
         }
           let pos=containers[q].randomPosToFit(E.size);
@@ -567,7 +588,9 @@ Game.prototype.populateEntities = function(entities, containers) {
 }
 
 Game.prototype.generateBoard = function() {
-  console.log('called',this);
+  this.cvs = this.cvs ? this.cvs : document.getElementById('game');
+  this.ctx = this.ctx ? this.ctx : this.cvs.getContext('2d');
+
   /* CREATE LEAVES */
   let root = new Leaf(0,0,gameWidth,gameHeight);
   let leafLitter=[root];
@@ -594,19 +617,19 @@ Game.prototype.generateBoard = function() {
   /*DRAW HALLWAYS BETWEEN CONTAINERS */
   let containers=leaves.map(l=>l.container);
   for (var i=0;i<leaves.length-1;i++) {
-    leaves[i].container.calculateHallway(leaves[i+1].container, containers);
+    leaves[i].container.calculateHallway(leaves[i+1].container, containers, ()=>this.generateBoard);
   }
 
-  /*POSITION PLAYER*/
-  let startPos=containers[0].randomPosToFit(playerSize);
-  this.P.setPos(round5(startPos.x1),round5(startPos.y1));
-  this.P.currentLocation=containers[0];
   let hallways=flattenArr(containers.map(c=>c.hallway).filter(e=>e).map(h=>h.getSubHallways()));
-
   let entityManifest = this.calculateEntitiesForLevel(this.level);
   this.populateEntities(entityManifest, containers);
   this.leaves=leaves;
   this.entities=containers.concat(hallways,leaves).filter(e=>e);
+  /*POSITION PLAYER*/
+  let startPos=containers[0].randomPosToFit(playerSize);
+  while (!startPos) { startPos=containers[0].randomPosToFit(playerSize); }
+  this.P.setPos(round5(startPos.x1),round5(startPos.y1));
+  this.P.currentLocation=containers[0];
   console.log(this.entities);
 }
 
@@ -655,13 +678,13 @@ Game.prototype.calculateEntitiesForLevel = function(level) {
     },
     {
       type: 'teleporter',
-      visible: false,
+      visible: true,
       size: 20,
       minVal: 5,
       maxVal: 6,
       minInstances: 1,
       maxInstances: 2,
-      limitToContainers: [0],
+      limitToContainers: 'last',
       consumedCallback: () => this.nextLevel()
     },
     {
@@ -675,7 +698,7 @@ Game.prototype.calculateEntitiesForLevel = function(level) {
       },
       minInstances: 1,
       maxInstances: 1,
-      limitToContainers: [0], //TODO switch generateTeleport to BOSS for container
+      limitToContainers: 'last',
       consumedCallback: () => this.generateTeleport()
     },
     {
@@ -752,14 +775,29 @@ Game.prototype.calculateEnemiesForLevel = function(level) {
 
 Game.prototype.nextLevel = function () {
   this.level++;
-  this.ctx.clearRect(0, 0, gameWidth, gameHeight);//clear the viewport AFTER the matrix is reset
-  this.ctx.setTransform(1,0,0,1,0,0);//reset the transform matrix as it is cumulative
   this.generateBoard();
   var camX = this.P.xPos;
   var camY = this.P.yPos;
+  this.ctx.setTransform(1,0,0,1,0,0);
+  this.ctx.clearRect(0, 0, this.cvs.width, this.cvs.height);
   this.ctx.translate(this.cvs.width/2-camX,this.cvs.height/2-camY);
-  this.drawEntities();
-  this.P.drawSelf(this.ctx);
+  if (this.hidden) {
+    this.ctx.setTransform(1,0,0,1,0,0);
+    this.ctx.clearRect(0, 0, this.cvs.width, this.cvs.height);
+    this.ctx.fillStyle='#000';
+    this.ctx.fillRect(0,0,this.cvs.width,this.cvs.height);
+    this.ctx.translate(this.cvs.width/2-camX,this.cvs.height/2-camY);
+    this.ctx.save();
+    this.ctx.beginPath();
+    this.ctx.lineWidth = 5;
+    this.ctx.strokeStyle = 'green';
+    this.ctx.arc(camX, camY, 105, 0, Math.PI * 2, false);
+    this.ctx.stroke();
+    this.ctx.clip();
+  }
+this.drawEntities();
+this.P.drawSelf(this.ctx);
+if (this.hidden) { this.ctx.restore(); }
 }
 
 Game.prototype.toggleHide = function () {
@@ -769,22 +807,24 @@ Game.prototype.toggleHide = function () {
 Game.prototype.initLevel = function(P) {
   this.cvs = document.getElementById('game');
   this.ctx = this.cvs.getContext('2d');
-  ctx=this.ctx;
+  // ctx=this.ctx;
   if(P) { this.P=P; }
   this.generateBoard();
   var camX = this.P.xPos;
   var camY = this.P.yPos;
 
   if (this.hidden) {
-    this.ctx.setTransform(1,0,0,1,0,0);//reset the transform matrix as it is cumulative
-    this.ctx.clearRect(0, 0, this.cvs.width, this.cvs.height);//clear the viewport AFTER the matrix is reset
-    //Clamp the camera position to the world bounds while centering the camera around the player
+    this.ctx.setTransform(1,0,0,1,0,0);
+    this.ctx.clearRect(0, 0, this.cvs.width, this.cvs.height);
     this.ctx.fillStyle='#000';
     this.ctx.fillRect(0,0,this.cvs.width,this.cvs.height);
     this.ctx.translate(this.cvs.width/2-camX,this.cvs.height/2-camY);
     this.ctx.save();
     this.ctx.beginPath();
-    this.ctx.arc(camX, camY, 100, 0, Math.PI * 2, false);
+    this.ctx.lineWidth = 5;
+    this.ctx.strokeStyle = 'green';
+    this.ctx.arc(camX, camY, 105, 0, Math.PI * 2, false);
+    this.ctx.stroke();
     this.ctx.clip();
   }
   this.drawEntities();
