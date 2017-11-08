@@ -1,21 +1,18 @@
 import * as UTIL from './Constants';
 
-/*START ENEMY CLASS*/
-let Enemy = function(xPos, yPos, XP, damage, health, level, consumedCallback) {
-  //health, XP, level, damage
+let Enemy = function(xPos, yPos, size, XP, damage, health, level, consumedCallback) {
   this.type='enemy';
   this.visible=true;
   this.consumed=false;
   this.xPos=xPos;
   this.yPos=yPos;
-  this.size=5;
+  this.size=size;
   this.ctx=null;
   this.XP=XP;
   this.damage=damage;
   this.health=health;
   this.level=level;
-
-  this.gainFromKill=Math.floor(XP/level);
+  this.gainFromKill=XP;
   this.consumedCallback=consumedCallback;
 }
 
@@ -37,29 +34,29 @@ Enemy.prototype.animate = function(ctx, callback) {
   let interval=setInterval(()=>{
     if (animCt===7) {
       clearInterval(interval);
-      ctx.clearRect(this.xPos,this.yPos,UTIL.playerSize,UTIL.playerSize);
+      ctx.clearRect(this.xPos,this.yPos,this.size,this.size);
       if (this.heath>0) {
         ctx.fillStyle=orange;
-        ctx.fillRect(this.xPos,this.yPos,UTIL.playerSize,UTIL.playerSize);
+        ctx.fillRect(this.xPos,this.yPos,this.size,this.size);
       }
       else {
-        ctx.clearRect(this.xPos,this.yPos,UTIL.playerSize,UTIL.playerSize);
+        ctx.clearRect(this.xPos,this.yPos,this.size,this.size);
       }
       return callback();
     }
     animCt++;
-    ctx.clearRect(this.xPos,this.yPos,UTIL.playerSize,UTIL.playerSize);
+    ctx.clearRect(this.xPos,this.yPos,this.size,this.size);
     animCt%2!==0 ? ctx.fillStyle=orange : ctx.fillStyle=red;
-    ctx.fillRect(this.xPos,this.yPos,UTIL.playerSize,UTIL.playerSize);
+    ctx.fillRect(this.xPos,this.yPos,this.size,this.size);
   },UTIL.ANIMATION_REPEAT_INTERVAL);
 }
 
 Enemy.prototype.consume = function(ctx, oldBackgroundColor) {
-  if (this.consumedCallback) { this.consumedCallback(); }
+  if (this.consumedCallback) { this.consumedCallback({xPos:this.xPos,yPos:this.yPos}); }
   ctx.fillStyle=oldBackgroundColor;
   ctx.fillRect(this.xPos,this.yPos,this.size,this.size);
   this.consumed=true;
+  this.visible=false;
 }
-/*END ENEMY CLASS*/
 
 export default Enemy;

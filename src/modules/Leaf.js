@@ -1,8 +1,7 @@
 import * as UTIL from './Constants';
 import Container from './Container';
 
-/*BEGIN LEAF CLASS*/
-let Leaf = function(x, y, width, height) { //x, y is upper-left coord
+let Leaf = function(x, y, width, height) {
   this.id=null;
   this.x=x;
   this.y=y;
@@ -60,6 +59,5 @@ Leaf.prototype.splitLeaf = function() {
 }
 
 Leaf.prototype.getLeafs = function() { return (!this.left&&!this.right) ? [this] : [].concat(this.left.getLeafs(), this.right.getLeafs()); }
-/*END LEAF CLASS*/
 
 export default Leaf;

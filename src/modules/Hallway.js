@@ -1,6 +1,5 @@
 import * as UTIL from './Constants';
 
-/*Start Hallway Class */
 let Hallway = function(x1, y1, x2, y2, direction) {
   this.x1=x1;
   this.y1=y1;
@@ -61,5 +60,5 @@ Hallway.prototype.isMoveAllowed = function(newX, newY) {
     }
     else { return false; }
 }
-/*End Hallway Class */
+
 export default Hallway;

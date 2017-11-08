@@ -12,6 +12,7 @@ export const gameWidth=1000;
 export const gameHeight=1000;
 export const rangeOverlap = (a,b) => [Math.max(a[0],b[0]),Math.min(a[1],b[1])];
 
+const levelUpCutoffs = [0, 0, 20, 50, 75, 100, 150];
 
 export const doesCollide = (a,b) => {
   var rect1 = {x: Math.min(a.x1,a.x2), y: Math.min(a.y1,a.y2), width: Math.abs(a.x2-a.x1), height: Math.abs(a.y2-a.y1)};
@@ -23,6 +24,14 @@ export const doesCollide = (a,b) => {
        return true;
   }
   return false;
+}
+
+export const didLevelUp = function (level, XP) {
+  let currentLevel;
+  for (var i=0;i<levelUpCutoffs.length;i++) {
+    if (XP<levelUpCutoffs[i]) { currentLevel=i-1; break; }
+  }
+  return level!==currentLevel ? currentLevel : false;
 }
 
 export const compass = function(a, b) {
@@ -42,14 +51,15 @@ export const fight = (a,b,ctx,currentElement,callback,posX,posY) => {
         b.animate(ctx,()=>{
         if (a.health<=0) {
           return a.death();
+          a.enemyInfo='';
         }
         else if (b.health<=0){ //you won
-          a.XP+=b.gainFromKill;
+          a.gainXP(b.gainFromKill);
           b.consume(ctx,currentElement.fillStyle);
-          a.enemyInfo.msg=`Defeated! ${b.gainFromKill} XP gained!`;
+          a.movePlayer(posX,posY,ctx);
+          a.drawSelf(ctx);
+          a.enemyInfo='';
         }
-        a.movePlayer(posX,posY,ctx);
-        a.drawSelf(ctx);
         return callback();
       });
     });

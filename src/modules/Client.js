@@ -1,8 +1,8 @@
 import React, { Component } from 'react';
-import Game from './BinaryTree.js';
+import Game from './Game.js';
 import Player from './Player.js';
 
-export default class MapDisplay extends Component {
+export default class Client extends Component {
   constructor(props) {
     super(props);
     this.state={movementAllowed: true, showHint: true, redrawDistance:10, hide:true, keyHeld:null, steps:0, keyTimeout:null, ctx:null, P:null};
@@ -11,7 +11,16 @@ export default class MapDisplay extends Component {
     this.playerChange=this.playerChange.bind(this);
     this.noMove=this.noMove.bind(this);
     this.init=this.init.bind(this);
+    this.messenger=this.messenger.bind(this);
+    this.calculateAngle=this.calculateAngle.bind(this);
+    this.loop=this.loop.bind(this);
   }
+
+  messenger = (M) => {
+    this.setState({gameMsg:M,msgReceivedTime:Date.now()});
+  }
+
+  draw = () => this.state.G.redraw();
 
   playerChange = (P) => {
     this.setState({P:Object.assign(this.state.P,P)},()=>{
@@ -43,7 +52,7 @@ export default class MapDisplay extends Component {
         let V=this.state.cvs;
         C.fillStyle='#000';
         C.fillRect(0,0,V.width,V.height);
-        C.setTransform(1,0,0,1,0,0);//reset the transform matrix as it is cumulative
+        C.setTransform(1,0,0,1,0,0);
         C.clearRect(0,0,V.width,V.height);
         C.fillRect(0,0,V.width,V.height);
         C.fillStyle='#FFF';
@@ -51,27 +60,41 @@ export default class MapDisplay extends Component {
         let counter=0;
         let interval=setInterval(function(){
           counter++;
-          if (counter==200) { clearInterval(interval); }
+          if (counter===200) { clearInterval(interval); }
           C.fillStyle=`rgba(${Math.floor(Math.random()*255)},${Math.floor(Math.random()*255)},${Math.floor(Math.random()*255)},1.0)`;
-          C.fillText("WINNER",Math.random()*(V.width),Math.random()*(V.height)); //(Math.random()+15)*counter,(Math.random()+15)*counter);
+          C.fillText("WINNER",Math.random()*(V.width),Math.random()*(V.height));
         },20);
       setTimeout(()=>{ this.init(); },10000);
     }
   });
 }
 
+  loop() {
+    this.draw;
+    this.P.drawSelf(this.ctx);
+  }
+
   init() {
+    this.messenger('WASD-move, hold Ctrl-run, H: toggle view');
     let P = new Player();
+    let G = new Game();
+    //pass callbacks
+    P.displayMsg=this.messenger;
     P.callbackChange = this.playerChange;
     P.callbackToggleFreezeMovement = this.noMove;
-    let G = new Game();
-    G.initLevel(P);
+    G.displayMsg=this.messenger;
     G.resetCallback=this.movePlayer;
-    G.callbackChange = this.gameChange;
+    G.callbackChange=this.gameChange;
+    //start game
+    G.initLevel(P);
     let cvs = document.getElementById('game');
     let ctx = cvs.getContext('2d');
-    this.setState({G,P,ctx,cvs});
-    // window.addEventListener('keypress', this.handleKeyPress);
+    this.setState({G,P,ctx,cvs,movementAllowed:true});
+    window.addEventListener('keypress', this.handleKeyPress);
+
+    if (this.state.looping===false) {
+      this.setState({looping:true},()=>requestAnimationFrame(this.loop)); // start the first frame
+    }
   }
 
   componentDidMount() {
@@ -81,7 +104,7 @@ export default class MapDisplay extends Component {
 
   noMove = () => {
     this.setState({movementAllowed:!this.state.movementAllowed});
-    this.draw(); //trigger a redraw TODO make only visible space
+    this.draw();
   }
 
   movePlayer = (key, step) => {
@@ -98,6 +121,7 @@ export default class MapDisplay extends Component {
         case 'KeyA': this.state.P.movePlayer(-step,0,C); break;
         case 'KeyS': this.state.P.movePlayer(0,step,C); break;
         case 'KeyD': this.state.P.movePlayer(step,0,C); break;
+        default: break;
       }
     }
   }
@@ -119,38 +143,6 @@ export default class MapDisplay extends Component {
     }
   }
 
-   draw = () => {
-    this.state.ctx.setTransform(1,0,0,1,0,0);//reset the transform matrix as it is cumulative
-    this.state.ctx.clearRect(0, 0, this.state.cvs.width, this.state.cvs.height);//clear the viewport AFTER the matrix is reset
-    //Clamp the camera position to the world bounds while centering the camera around the player
-    var camX = this.state.P.xPos;
-    var camY = this.state.P.yPos;
-    this.setState({camX:camX, camY:camY});
-if (this.state.hide)
-  {
-    this.state.ctx.fillStyle='#000';
-    this.state.ctx.fillRect(0,0,this.state.cvs.width,this.state.cvs.height);
-  }
-    this.state.ctx.translate(this.state.cvs.width/2-camX,this.state.cvs.height/2-camY);
-if (this.state.hide) {
-    this.state.ctx.save();
-    // Create a circle
-    this.state.ctx.beginPath();
-    this.state.ctx.lineWidth = 5;
-    this.state.ctx.strokeStyle = 'green';
-    this.state.ctx.arc(camX, camY, 100, 0, Math.PI * 2, false);
-    this.state.ctx.stroke();
-    this.state.ctx.beginPath();
-    this.state.ctx.arc(camX, camY, 95, 0, Math.PI * 2, false);
-    this.state.ctx.clip();
-  }
-    this.state.G.drawEntities();
-    this.state.P.drawSelf(this.state.ctx);
-    if (this.state.hide) {
-      this.state.ctx.restore();
-    }
-}
-
   handleKeyPress = (e) => {
     if (this.state) {
       if (e.code==='KeyH') {
@@ -160,13 +152,37 @@ if (this.state.hide) {
         });
       }
       let steps = e.ctrlKey ? 20 : 5;
-      this.setState({steps:this.state.steps+=steps});
       if ((Math.abs(this.state.P.xPos-this.state.camX)>this.state.redrawDistance)||(Math.abs(this.state.P.yPos-this.state.camY)>25))
       {
         this.draw();
       }
       this.movePlayer(e.code, steps);
     }
+  }
+
+  calculateAngle = () => {
+    const P=this.state.P;
+    let normX, normY, absX, absY;
+    absX=Math.abs(P.moveHint.xDist);
+    absY=Math.abs(P.moveHint.yDist);
+    if (absX>absY) {
+      normX=1;
+      normY=absY/absX;
+    }
+    else if (absY>absX) {
+      normY=1;
+      normX=absX/absY;
+    }
+    else {
+      normX=1;
+      normY=1;
+    }
+    let Q;
+    if ((P.moveHint.xDist>0&&P.moveHint.yDist>0)) { Q=0; }
+    else if ((P.moveHint.xDist<0&&P.moveHint.yDist>0)) { Q=1; }
+    else if ((P.moveHint.xDist<0&&P.moveHint.yDist<0)) { Q=2; }
+    else if ((P.moveHint.xDist>0&&P.moveHint.yDist<0)) { Q=3; }
+    return Math.atan(normY/normX)*(180/Math.PI)+(Q)*90;
   }
 
   render() {
@@ -180,55 +196,26 @@ if (this.state.hide) {
       }
     }
     if (P) {
-    if (P.enemyInfo) {
-      enemyInfo = P.enemyInfo.msg ? P.enemyInfo.msg : `health: ${P.enemyInfo.health}, XP: ${P.enemyInfo.XP}`;
-    }
-    if (P.weapon) {
-      W=`${P.weapon.name} [damage: ${P.weapon.damage}]`;
-    }
-    if (P.moveHint&&this.state.showHint) {
-      if (P.moveHint.xDist<30&&P.moveHint.yDist<30) {
-        //do nothing
-      }
-      else {
-        let normX, normY, absX, absY;
-        absX=Math.abs(P.moveHint.xDist);
-        absY=Math.abs(P.moveHint.yDist);
-        if (absX>absY) {
-          normX=1;
-          normY=absY/absX;
+      if (P.weapon) { W=`${P.weapon.name} [damage: ${P.weapon.damage}]`; }
+      if (P.moveHint) {
+        // if (P.moveHint.xDist+P.moveHint.yDist<10) { //do nothing
+        // } else {
+        let degAngle=this.calculateAngle();
+        moveHint = (<div id="moveArrow" style={{transform: `rotate(-${degAngle}deg)`}}>→</div>);
         }
-        else if (absY>absX) {
-          normY=1;
-          normX=absX/absY;
-        }
-        else { //equal
-          normX=1;
-          normY=1;
-        }
-        let Q;
-        if ((P.moveHint.xDist>0&&P.moveHint.yDist>0)) { Q=0; }
-        else if ((P.moveHint.xDist<0&&P.moveHint.yDist>0)) { Q=1; }
-        else if ((P.moveHint.xDist<0&&P.moveHint.yDist<0)) { Q=2; }
-        else if ((P.moveHint.xDist>0&&P.moveHint.yDist<0)) { Q=3; }
-        let degAngle=Math.atan(normY/normX)*(180/Math.PI)+(Q)*90;
-        let arrows=['','→','↗','↑','↖','←','↙','↓','↘'];
-        let radAngle=(degAngle*(Math.PI))/180;
-        moveHint=arrows[Math.ceil(degAngle/45)];
-        // moveHint = (<div style={{transform: `rotate(-${degAngle}deg)`, transformOrigin: 'center'}}>→</div>);
-      }
     }
-  }
-    return(<div>
-      <div id="info">{level}<br />
-      Health: {this.state.P&&this.state.P.health || 0} | XP: {this.state.P&&this.state.P.XP || ''}<br />
-      Weapon: {W}<br />
-      movement hint: {moveHint && moveHint}<br />
-      enemy info {enemyInfo}
-      </div>
-      <div id="map">
-    <canvas id="game" width="500" height="500" />
-    </div>
-  </div>);
+    let gameMsg=(<div id="gameMessage">{this.state.gameMsg}</div>);
+    return(<div id="gameContainer">
+          <div id="canvas">
+            <canvas id="game" width="500" height="500" />
+            {this.state.hide && moveHint}
+          <div id="info">
+            {level}<br />
+            Health: {this.state.P&&this.state.P.health || 0} | XP: {this.state.P&&this.state.P.XP || ''} | Level: {this.state.P&&this.state.P.level || ''}<br />
+            Weapon: {W}<br />
+            {(Date.now()-this.state.msgReceivedTime<2000) && gameMsg}
+          </div>
+        </div>
+      </div>);
   }
 }

@@ -1,7 +1,6 @@
 import Hallway from './Hallway';
 import * as UTIL from './Constants';
 
-/*BEGIN CONTAINER CLASS*/
 let Container = function(x1, y1, x2, y2) {
   this.x1=x1;
   this.y1=y1;
@@ -9,7 +8,7 @@ let Container = function(x1, y1, x2, y2) {
   this.y2=y2;
   this.hallway=null;
   this.fillStyle=null;
-  this.contents=[]; //contents is an array of entities
+  this.contents=[];
   this.visible=true;
   this.type='container'
 }
@@ -44,7 +43,15 @@ Container.prototype.isMoveAllowed = function(newX, newY) {
   return false;
 }
 
-Container.prototype.randomPosToFit = function (size) {
+Container.prototype.clearContentsFromCoords = function (xPos, yPos, size) {
+  let clearRect = {x1:xPos, x2:xPos+size, y1:yPos, y2:yPos+size};
+  this.contents=this.contents.filter(e=>{
+    let itemRect={x1:e.xPos, x2:e.xPos+size, y1:e.yPos, y2:e.yPos+size};
+    return UTIL.doesCollide(clearRect,itemRect);
+  });
+}
+
+Container.prototype.randomPosToFit = function (size, padding) {
   if (!this.contents.length) {
     let randX=UTIL.round5(UTIL.randomIn(this.x1,(this.x2-size)));
     let randY=UTIL.round5(UTIL.randomIn(this.y1,(this.y2-size)));
@@ -67,7 +74,7 @@ Container.prototype.randomPosToFit = function (size) {
     for (var i=0;i<this.contents.length;i++) {
       let I=this.contents[i];
       let contentsRect={x1:I.xPos,x2:I.xPos+I.size,y1:I.yPos,y2:I.yPos+I.size};
-      if (UTIL.doesCollide(contentsRect,candidate)) {
+      if (UTIL.doesCollide(contentsRect,candidate,padding)) {
         break;
       }
       else if (i===this.contents.length-1) { return candidate; }
@@ -109,15 +116,13 @@ Container.prototype.calculateHallway = function(dest, containerList, failToConne
     let xStart, xEnd;
     let h1, h2, h3;
     if (destFartherRight) {
-      //farther right, start with right TODO or up
       //if destFartherRight, pick random y-coord to start from on this
       xStart=this.x2;
       xEnd=dest.x1;
-
       let potentialRects=[];
-      //possible hallways: anything between xStart and xEnd
-      //random hallway value between xStart+1+UTIL.hallwayWidth and xEnd-1-UTIL.hallwayWidth
-      //check for entity intersection at each width for height from yStart to yEnd
+      /*possible hallways: anything between xStart and xEnd
+      random hallway value between xStart+1+UTIL.hallwayWidth and xEnd-1-UTIL.hallwayWidth
+      check for entity intersection at each width for height from yStart to yEnd*/
       for (var i=5;i+UTIL.hallwayWidth+xStart<xEnd;i+=5) { //potential vertical rect
         potentialRects.push({
           x1:xStart+i,
@@ -148,8 +153,6 @@ Container.prototype.calculateHallway = function(dest, containerList, failToConne
         h1.subHallway=h2;
         h1.connectsNodes=[this, h2];
       }
-      else { //TODO this doesnt seem to matter up or down we just draw it
-      } //go remaining half-distance LEFT
       h3 = new Hallway(h2.x2, yStart, xStart+xDistance, yStart+UTIL.hallwayWidth, 'H-last');
       h2.subHallway=h3;
       h2.connectsNodes=[h1, h3];
@@ -188,10 +191,7 @@ Container.prototype.calculateHallway = function(dest, containerList, failToConne
         failToConnectCallback();
         return false;
       }
-      if (destFartherUp) {
-        //TODO I believe this case (dest farther left and farther up) is impossible due to the BST
-      }
-      else { //farther left and farther down
+      if (!destFartherUp) { //farther left and farther down
         h1=new Hallway(xStart, yStart, xStart+UTIL.hallwayWidth, newX.y1, 'V-first');
         h2=new Hallway(newX.x2+UTIL.hallwayWidth, newX.y1, h1.x2, newX.y2, 'H-middle');
         h1.subHallway=h2;
@@ -210,6 +210,5 @@ Container.prototype.calculateHallway = function(dest, containerList, failToConne
 Container.prototype.drawSelf = function() {
   this.contents.filter(e=>e.visible&&!e.consumed).map(e=>e.drawSelf(this.ctx));
 }
-/*END CONTAINER CLASS*/
 
 export default Container;
