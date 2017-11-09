@@ -17,7 +17,7 @@ let Enemy = function(xPos, yPos, size, XP, damage, health, level, consumedCallba
 }
 
 Enemy.prototype.attack = function() {
-  return this.damage*UTIL.randomIn(1,10);
+  return this.level*UTIL.randomIn(5,10);
 }
 
 Enemy.prototype.drawSelf = function(ctx) {

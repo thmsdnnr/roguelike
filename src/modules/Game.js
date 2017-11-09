@@ -1,12 +1,12 @@
 import Leaf from './Leaf';
-import Container from './Container';
-import Player from './Player';
+// import Container from './Container';
+// import Player from './Player';
 import Enemy from './Enemy';
 import Item from './Item';
 import * as UTIL from './Constants';
 
 let Game = function() {
-  this.level=5;
+  this.level=1;
   this.hidden=true;
   this.hint=true;
   this.lastLevel=5;
@@ -99,7 +99,7 @@ Game.prototype.generateBoard = function() {
   /*DRAW HALLWAYS BETWEEN CONTAINERS */
   let containers=leaves.map(l=>l.container);
   for (var i=0;i<leaves.length-1;i++) {
-    leaves[i].container.calculateHallway(leaves[i+1].container, containers, ()=>this.generateBoard);
+    leaves[i].container.calculateHallway(leaves[i+1].container, containers, this.initLevel);
   }
   let hallways=UTIL.flattenArr(containers.map(c=>c.hallway).filter(e=>e).map(h=>h.getSubHallways()));
   let entityManifest = this.calculateEntitiesForLevel(this.level);

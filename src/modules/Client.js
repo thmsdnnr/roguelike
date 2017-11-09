@@ -5,7 +5,7 @@ import Player from './Player.js';
 export default class Client extends Component {
   constructor(props) {
     super(props);
-    this.state={movementAllowed: true, showHint: true, redrawDistance:10, hide:true, keyHeld:null, steps:0, keyTimeout:null, ctx:null, P:null};
+    this.state={movementAllowed: true, showInfo: true, showHint: true, redrawDistance:10, hide:true, keyHeld:null, steps:0, keyTimeout:null, ctx:null, P:null};
     this.movePlayer=this.movePlayer.bind(this);
     this.gameChange=this.gameChange.bind(this);
     this.playerChange=this.playerChange.bind(this);
@@ -25,6 +25,7 @@ export default class Client extends Component {
   playerChange = (P) => {
     this.setState({P:Object.assign(this.state.P,P)},()=>{
       if (this.state.P.alive===false) {
+        this.setState({showHint:false, showInfo:false});
         let C=this.state.ctx;
         let V=this.state.cvs;
         C.fillStyle='#000';
@@ -48,6 +49,7 @@ export default class Client extends Component {
   gameChange = (G) => {
     this.setState({G:Object.assign(this.state.G,G)},()=>{
       if (this.state.G.playerWon) {
+        this.setState({showHint:false, showInfo:false});
         let C=this.state.ctx;
         let V=this.state.cvs;
         C.fillStyle='#000';
@@ -89,9 +91,8 @@ export default class Client extends Component {
     G.initLevel(P);
     let cvs = document.getElementById('game');
     let ctx = cvs.getContext('2d');
-    this.setState({G,P,ctx,cvs,movementAllowed:true});
+    this.setState({G,P,ctx,cvs,movementAllowed:true,showHint:true,showInfo:true});
     window.addEventListener('keypress', this.handleKeyPress);
-
     if (this.state.looping===false) {
       this.setState({looping:true},()=>requestAnimationFrame(this.loop)); // start the first frame
     }
@@ -126,23 +127,6 @@ export default class Client extends Component {
     }
   }
 
-  handleKeyHeld = (e) => {
-    if (e.type==='keyup') {
-      if (this.state.keyInterval) {
-        clearInterval(this.state.keyInterval);
-      }
-    }
-    if (e.type==='keydown') {
-      if (this.state.keyInterval) {
-        clearInterval(this.state.keyInterval);
-      }
-      let interval=setInterval(()=>{
-        this.movePlayer(e.code,5);
-      },10);
-      this.setState({keyHeld:e.code, keyInterval:interval});
-    }
-  }
-
   handleKeyPress = (e) => {
     if (this.state) {
       if (e.code==='KeyH') {
@@ -152,10 +136,7 @@ export default class Client extends Component {
         });
       }
       let steps = e.ctrlKey ? 20 : 5;
-      if ((Math.abs(this.state.P.xPos-this.state.camX)>this.state.redrawDistance)||(Math.abs(this.state.P.yPos-this.state.camY)>25))
-      {
-        this.draw();
-      }
+      this.draw();
       this.movePlayer(e.code, steps);
     }
   }
@@ -187,7 +168,7 @@ export default class Client extends Component {
 
   render() {
     let W=null;
-    let moveHint,enemyInfo,level;
+    let moveHint,level;
     const P=this.state.P;
     const G=this.state.G;
     if (G) {
@@ -197,24 +178,24 @@ export default class Client extends Component {
     }
     if (P) {
       if (P.weapon) { W=`${P.weapon.name} [damage: ${P.weapon.damage}]`; }
-      if (P.moveHint) {
-        // if (P.moveHint.xDist+P.moveHint.yDist<10) { //do nothing
-        // } else {
+      if (P.moveHint&&this.state.hide&&this.state.showHint) {
         let degAngle=this.calculateAngle();
         moveHint = (<div id="moveArrow" style={{transform: `rotate(-${degAngle}deg)`}}>→</div>);
-        }
+      }
     }
     let gameMsg=(<div id="gameMessage">{this.state.gameMsg}</div>);
     return(<div id="gameContainer">
           <div id="canvas">
             <canvas id="game" width="500" height="500" />
             {this.state.hide && moveHint}
-          <div id="info">
+          {this.state.showInfo &&
+            <div id="info">
             {level}<br />
-            Health: {this.state.P&&this.state.P.health || 0} | XP: {this.state.P&&this.state.P.XP || ''} | Level: {this.state.P&&this.state.P.level || ''}<br />
+            Health: {this.state.P&&this.state.P.health} | XP: {this.state.P&&this.state.P.XP} | Level: {this.state.P&&this.state.P.level}<br />
             Weapon: {W}<br />
             {(Date.now()-this.state.msgReceivedTime<2000) && gameMsg}
           </div>
+        }
         </div>
       </div>);
   }

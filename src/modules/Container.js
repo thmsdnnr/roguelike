@@ -40,6 +40,10 @@ Container.prototype.isMoveAllowed = function(newX, newY) {
     let hallwayRect={x1:H.x1,x2:H.x2,y1:H.y1,y2:H.y2};
     if (UTIL.doesCollide(playerRect, hallwayRect)) { return this.prevHallway; }
   }
+  // if (newX < this.x1) { return {maxExtent: {xCoord: this.x1}}; }
+  // else if (newX > this.x2) { return {maxExtent: {xCoord: this.x2}}; }
+  // if (newY < this.y1) { return {maxExtent: {yCoord: this.y1}}; }
+  // else if (newY > this.y2) { return {maxExtent: {yCoord: this.y2}}; }
   return false;
 }
 
@@ -106,9 +110,9 @@ Container.prototype.calculateHallway = function(dest, containerList, failToConne
     let destFartherRight = (dest.x2-this.x2>0) ? true : false;
     let destFartherUp = (this.y2-dest.y1>0) ? true : false;
     let xDistance=Math.abs(dest.x1-this.x2);
-    let yDistance=Math.abs(dest.y1-this.y2);
+    // let yDistance=Math.abs(dest.y1-this.y2);
     xDistance = destFartherRight ? xDistance : -1*xDistance;
-    yDistance = destFartherUp ? yDistance : -1*yDistance;
+    // yDistance = destFartherUp ? yDistance : -1*yDistance;
 
     let yStart = UTIL.round5(UTIL.randomIn(dest.y1+UTIL.hallwayWidth,dest.y2-UTIL.hallwayWidth));
     let yEnd = UTIL.round5(UTIL.randomIn(this.y1+UTIL.hallwayWidth,this.y2-UTIL.hallwayWidth));
@@ -132,7 +136,6 @@ Container.prototype.calculateHallway = function(dest, containerList, failToConne
         });
       }
       let testedOptions=[];
-      let good=true;
       let possibleCollide=containerList.concat(UTIL.flattenArr(containerList.map(c=>c.hallway).filter(e=>e).map(h=>h.getSubHallways())));
       for (var i=0;i<potentialRects.length;i++) {
         for (var j=0;j<possibleCollide.length;j++) {
@@ -175,7 +178,6 @@ Container.prototype.calculateHallway = function(dest, containerList, failToConne
         });
       }
       let testedOptions=[];
-      let good=true;
       let possibleCollide=containerList.concat(UTIL.flattenArr(containerList.map(c=>c.hallway).filter(e=>e).map(h=>h.getSubHallways())));
       for (var i=0;i<potentialRects.length;i++) {
         for (var j=0;j<possibleCollide.length;j++) {

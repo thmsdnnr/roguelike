@@ -51,14 +51,12 @@ export const fight = (a,b,ctx,currentElement,callback,posX,posY) => {
         b.animate(ctx,()=>{
         if (a.health<=0) {
           return a.death();
-          a.enemyInfo='';
         }
         else if (b.health<=0){ //you won
           a.gainXP(b.gainFromKill);
           b.consume(ctx,currentElement.fillStyle);
           a.movePlayer(posX,posY,ctx);
           a.drawSelf(ctx);
-          a.enemyInfo='';
         }
         return callback();
       });

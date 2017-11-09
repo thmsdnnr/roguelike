@@ -4,7 +4,7 @@ let Player = function(xPos, yPos) {
   this.xPos=xPos;
   this.yPos=yPos;
   this.ctx=null;
-  this.health=10000;
+  this.health=100;
   this.XP=1;
   this.level=1;
   this.weapon={name:'pebbles', damage:2}
@@ -67,7 +67,7 @@ Player.prototype.setPos = function(xPos, yPos) {
 }
 
 Player.prototype.attack = function() {
-  return this.weapon.damage*this.level;
+  return this.weapon.damage*this.level+(0.5*(this.level+1));
 }
 
 Player.prototype.movementHint = function(ctx) {
@@ -127,6 +127,7 @@ Player.prototype.movePlayer = function(xAmt, yAmt, ctx) {
     this.yPos+=yAmt;
     this.drawSelf(ctx);
   }
+  this.callbackChange(this);
   //cannot move here do nothing
 }
 
